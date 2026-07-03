@@ -1,23 +1,60 @@
-"""Takes an embedded question and retreives 20 chunks with citations"""
+"""Retrieve top-K chunks for a (strategy, model, rerank) config and generate an answer.
 
+The 8 configs = 2 chunking strategies (fixedsize, sectionaware) x 2 embedding
+models (bge-small, e5-small) x rerank on/off. Generation model is frozen in
+.opencode/agent/chat.md and is NOT part of the config (plan sec 3).
+"""
+
+import argparse
 import re
 import subprocess
-import sys
 
 import chromadb
 from sentence_transformers import SentenceTransformer
 
 from config import (
     CHROMA_DIR,
-    EMBEDDING_MODEL,
+    CHUNK_STRATEGIES,
+    EMBEDDING_MODELS,
     OPENCODE_AGENT,
+    TOP_K_FINAL,
     TOP_K_RETRIEVE,
 )
-from embed import COLLECTION_NAME
+from embed import collection_name, query_prefix
+from rerank import Reranker
 
 
-def retrieve(question, model, collection, k=TOP_K_RETRIEVE):
-    q_emb = model.encode([question], normalize_embeddings=True).tolist()
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="RAG query over a (strategy, model, rerank) config."
+    )
+    p.add_argument("question", help="The question to ask")
+    p.add_argument(
+        "--strategy",
+        choices=CHUNK_STRATEGIES,
+        default="sectionaware",
+        help="Chunking strategy (default: sectionaware)",
+    )
+    p.add_argument(
+        "--model",
+        choices=list(EMBEDDING_MODELS),
+        default="bge-small",
+        help="Embedding model key (default: bge-small)",
+    )
+    p.add_argument(
+        "--rerank",
+        choices=["on", "off"],
+        default="off",
+        help="Cross-encoder rerank on/off (default: off)",
+    )
+    p.add_argument("--top-k-retrieve", type=int, default=TOP_K_RETRIEVE)
+    p.add_argument("--top-k-final", type=int, default=TOP_K_FINAL)
+    return p.parse_args()
+
+
+def retrieve(question, model, collection, k, query_pfx):
+    q_text = query_pfx + question
+    q_emb = model.encode([q_text], normalize_embeddings=True).tolist()
     results = collection.query(query_embeddings=q_emb, n_results=k)
     hits = []
     for i in range(len(results["ids"][0])):
@@ -37,17 +74,17 @@ def build_prompt(question, hits):
     for h in hits:
         m = h["meta"]
         context_blocks.append(
-            f"[chunk_id={h['chunk_id']} ticker={m['ticker']}]\n{h['text']}"
+            f"[chunk_id={h['chunk_id']} ticker={m['ticker']} anchor={m.get('anchor', '?')}]\n{h['text']}"
         )
     context = "\n\n-----\n\n".join(context_blocks)
-    return f"""Answer the question using ONLY the context below. After your answer, cite the exact chunk_id(s) you used.
+    return f"""Answer the question using ONLY the context below. Cite the exact chunk_id(s) you used.
 If the answer is not in the context, say "Not found in corpus" — do not guess.
- 
+
 Context:
 {context}
- 
+
 Question: {question}
- 
+
 Answer (end with "Citations: [chunk_id, ...]"):"""
 
 
@@ -66,21 +103,36 @@ def generate(prompt):
     return "\n".join(lines).strip()
 
 
-def main(question):
-    model = SentenceTransformer(EMBEDDING_MODEL)
+def main():
+    args = parse_args()
+    model_name = EMBEDDING_MODELS[args.model]
+    print(
+        f"[config] strategy={args.strategy} model={args.model} rerank={args.rerank}"
+    )
+
+    model = SentenceTransformer(model_name)
     client = chromadb.PersistentClient(path=CHROMA_DIR)
-    collection = client.get_collection(COLLECTION_NAME)
+    col = client.get_collection(collection_name(args.strategy, args.model))
 
-    hits = retrieve(question, model, collection)
-    print(f"[retrived] {len(hits)} chunks (top distance={hits[0]['distance']:.3f})\n")
+    hits = retrieve(
+        args.question, model, col, args.top_k_retrieve, query_prefix(args.model)
+    )
+    print(f"[retrieved] {len(hits)} chunks (top distance={hits[0]['distance']:.3f})")
 
-    prompt = build_prompt(question, hits)
+    if args.rerank == "on":
+        reranker = Reranker()
+        hits = reranker.rerank(args.question, hits, top_k=args.top_k_final)
+        print(f"[reranked] top {len(hits)}")
+    else:
+        hits = hits[: args.top_k_final]
+
+    print("[sent to LLM] anchors:", [h["meta"].get("anchor", "?") for h in hits])
+
+    prompt = build_prompt(args.question, hits)
     answer = generate(prompt)
+    print()
     print(answer)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print('Usage: python query.py "your question"')
-        sys.exit(1)
-    main(sys.argv[1])
+    main()
