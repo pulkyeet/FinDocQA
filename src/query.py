@@ -17,11 +17,14 @@ from config import (
     CHUNK_STRATEGIES,
     EMBEDDING_MODELS,
     OPENCODE_AGENT,
+    OPENCODE_ATTACH,
     TOP_K_FINAL,
     TOP_K_RETRIEVE,
+    sanitize_prompt,
 )
 from embed import collection_name, query_prefix
 from rerank import Reranker
+from web_search import is_abstention, build_web_prompt
 
 
 def parse_args():
@@ -89,8 +92,12 @@ Answer (end with "Citations: [chunk_id, ...]"):"""
 
 
 def generate(prompt):
+    prompt = sanitize_prompt(prompt)
+    base_cmd = ["opencode", "run", "--agent", OPENCODE_AGENT]
+    if OPENCODE_ATTACH:
+        base_cmd += ["--attach", OPENCODE_ATTACH]
     result = subprocess.run(
-        ["opencode", "run", "--agent", OPENCODE_AGENT, prompt],
+        base_cmd + [prompt],
         capture_output=True,
         text=True,
         timeout=180,
@@ -130,6 +137,14 @@ def main():
 
     prompt = build_prompt(args.question, hits)
     answer = generate(prompt)
+
+    if is_abstention(answer):
+        print("[rag abstained — falling back to web search]")
+        web_prompt = build_web_prompt(args.question)
+        answer = generate(web_prompt)
+        if "source: web" not in answer.lower():
+            answer = answer.rstrip() + " [source: web]"
+
     print()
     print(answer)
 

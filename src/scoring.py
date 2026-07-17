@@ -288,16 +288,16 @@ WEB_TAGS = ["source: web", "[web]", "(web)"]
 def routing_score(answer_text: str, expected_route: str) -> str:
     """Classify the model's answer into corpus / abstain / web and compare.
 
-    Heuristics: presence of abstention phrases => abstain. Presence of web
-    provenance tag => web. Else corpus. Compare to expected_route.
+    Heuristics: web tag checked FIRST (provenance overrides abstention phrasing);
+    then abstention phrases; otherwise corpus. Compare to expected_route.
     """
     if not answer_text:
         return "wrong"
     t = answer_text.lower()
-    if any(p in t for p in ABSTAIN_PHRASES):
-        predicted = "abstain"
-    elif any(w in t for w in WEB_TAGS):
+    if any(w in t for w in WEB_TAGS):
         predicted = "web"
+    elif any(p in t for p in ABSTAIN_PHRASES):
+        predicted = "abstain"
     else:
         predicted = "corpus"
     return "correct" if predicted == expected_route else f"wrong({predicted}->{expected_route})"

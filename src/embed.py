@@ -8,9 +8,14 @@ document prefix when encoding chunks and expose a query prefix for query.py.
 """
 
 import json
+import logging
+import os
+import glob as _glob
 
 import chromadb
 from sentence_transformers import SentenceTransformer
+
+logger = logging.getLogger(__name__)
 
 from config import (
     CHROMA_DIR,
@@ -35,11 +40,30 @@ def collection_name(strategy: str, model_key: str) -> str:
     return f"{strategy}__{model_key}"
 
 
-def load_chunks(strategy: str):
+def load_chunks(strategy: str, fiscal_year: str | None = None):
+    """Load chunks for all tickers.
+
+    If fiscal_year is given, load only that year. Otherwise (v1 compat),
+    glob {ticker}_FY*_{strategy}.json and load the latest FY per ticker.
+    """
     all_chunks = []
     for ticker in TICKERS:
-        path = f"{CHUNKS_DIR}/{ticker}_{strategy}.json"
-        with open(path) as f:
+        if fiscal_year:
+            path = f"{CHUNKS_DIR}/{ticker}_{fiscal_year}_{strategy}.json"
+            if not os.path.exists(path):
+                continue
+            files = [path]
+        else:
+            pattern = f"{CHUNKS_DIR}/{ticker}_FY*_{strategy}.json"
+            files = sorted(_glob.glob(pattern))
+            if not files:
+                # Fallback to v1 naming
+                path = f"{CHUNKS_DIR}/{ticker}_{strategy}.json"
+                if os.path.exists(path):
+                    files = [path]
+        if not files:
+            continue
+        with open(files[-1]) as f:
             chunks = json.load(f)
         for c in chunks:
             c["ticker"] = ticker
@@ -69,8 +93,11 @@ def embed_collection(strategy: str, model_key: str, model_name: str, client) -> 
     print(f"\n=== Building collection: {name} ===")
     try:
         client.delete_collection(name)
-    except Exception:
+    except ValueError:
+        # Collection doesn't exist yet — that's fine.
         pass
+    except Exception as exc:
+        logger.warning("Failed to delete collection '%s': %s", name, exc)
     collection = client.create_collection(name)
 
     chunks = load_chunks(strategy)

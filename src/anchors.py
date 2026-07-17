@@ -6,7 +6,6 @@ key works for fixed-size, section-aware, and any future strategy.
 """
 
 import re
-from typing import Optional
 
 ANCHOR_VOCABULARY = {
     # Item-level prose anchors
@@ -116,7 +115,12 @@ def table_heading_to_anchor(heading_text: str, fallback_anchor: str) -> str:
         fallback_anchor: Anchor of the enclosing Item section if no keyword matches.
     """
     norm = _normalize(heading_text)
-    if any(kw in norm for kw in ("statement of operations", "income statement", "consolidated statements of operations")):
+    if any(kw in norm for kw in (
+        "statement of operations", "income statement",
+        "consolidated statements of operations",
+        "consolidated statements of income",
+        "consolidated statement of income",
+    )):
         return "income_statement"
     if "operations" in norm and "income" in norm:
         return "income_statement"

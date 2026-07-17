@@ -15,7 +15,9 @@ import warnings
 from bs4 import BeautifulSoup
 from bs4 import XMLParsedAsHTMLWarning
 from config import RAW_DIR, CHUNKS_DIR, TICKERS, CHUNK_SIZE_TOKENS, CHUNK_OVERLAP_TOKENS
+from config import SA_TARGET_TOKENS, SA_MAX_TOKENS, SA_MIN_TOKENS
 from anchors import item_header_to_anchor, table_heading_to_anchor
+from fetch import fiscal_year_label
 
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
@@ -23,10 +25,7 @@ CHARS_PER_TOKEN = 4
 CHUNK_SIZE_CHARS = CHUNK_SIZE_TOKENS * CHARS_PER_TOKEN
 OVERLAP_CHARS = CHUNK_OVERLAP_TOKENS * CHARS_PER_TOKEN
 
-# Section-aware sizing (plan §5: target 512-800 tokens; small-section floor ~100 tokens)
-SA_TARGET_TOKENS = 600
-SA_MAX_TOKENS = 800
-SA_MIN_TOKENS = 100
+# Section-aware sizing — imported from config.py (v2: 350/500 tok)
 SA_TARGET_CHARS = SA_TARGET_TOKENS * CHARS_PER_TOKEN
 SA_MAX_CHARS = SA_MAX_TOKENS * CHARS_PER_TOKEN
 SA_MIN_CHARS = SA_MIN_TOKENS * CHARS_PER_TOKEN
@@ -37,14 +36,112 @@ SCALE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Keyword-based section heading patterns for filings that don't use "Item X." format
+SECTION_HEADING_PATTERNS = [
+    (re.compile(r"^\s*Risk\s+Factors\s*$", re.IGNORECASE), "item1a_risk"),
+    (re.compile(r"^\s*Unresolved\s+Staff\s+Comments\s*$", re.IGNORECASE), "item1b_unresolved"),
+    (re.compile(r"^\s*Cybersecurity\s*$", re.IGNORECASE), "item1c_cybersecurity"),
+    (re.compile(r"^\s*Business\s*$", re.IGNORECASE), "item1_business"),
+    (re.compile(r"^\s*Properties\s*$", re.IGNORECASE), "item2_properties"),
+    (re.compile(r"^\s*Legal\s+Proceedings\s*$", re.IGNORECASE), "item3_legal"),
+    (re.compile(r"^\s*Mine\s+Safety\s+Disclosures\s*$", re.IGNORECASE), "item4_safety"),
+    (re.compile(r"^\s*Market\s+for\s+.*Common\s+Stock", re.IGNORECASE), "item5_market"),
+    (re.compile(r"^\[?\s*Reserved\s*\]?\s*$", re.IGNORECASE), "item6_reserved"),
+    (re.compile(r"Management\s*['\u2019]s\s+Discussion\s+and\s+Analysis", re.IGNORECASE), "item7_mdna"),
+    (re.compile(r"^\s*Quantitative\s+and\s+Qualitative\s+Disclosures?\s+About\s+Market\s+Risk\s*$", re.IGNORECASE), "item7a_market_risk"),
+    (re.compile(r"Financial\s+Statements\s+and\s+Supplementary\s+Data", re.IGNORECASE), "item8_financials"),
+    (re.compile(r"Changes\s+in\s+and\s+Disagreements", re.IGNORECASE), "item9_changes"),
+    (re.compile(r"Controls\s+and\s+Procedures\s*$", re.IGNORECASE), "item9a_controls"),
+    (re.compile(r"Other\s+Information\s*$", re.IGNORECASE), "item9b_other"),
+    (re.compile(r"Disclosure\s+Regarding\s+Foreign\s+Jurisdictions", re.IGNORECASE), "item9c_foreign"),
+    (re.compile(r"Directors?,\s*Executive\s+Officers?", re.IGNORECASE), "item10_governance"),
+    (re.compile(r"Executive\s+Compensation\s*$", re.IGNORECASE), "item11_compensation"),
+    (re.compile(r"Security\s+Ownership\s+of\s+Certain\s+Beneficial\s+Owners", re.IGNORECASE), "item12_equity"),
+    (re.compile(r"Certain\s+Relationships\s+and\s+Related\s+Transactions", re.IGNORECASE), "item13_relationships"),
+    (re.compile(r"Principal\s+Account(ant|ing)\s+Fees", re.IGNORECASE), "item14_accountant"),
+    (re.compile(r"Exhibits?,\s*Financial\s+Statement\s+Schedules?\s*$", re.IGNORECASE), "item15_exhibits"),
+]
+
+# Fallback: map itemX_unknown anchors to canonical anchors for known critical sections
+_ITEM_FALLBACK_ANCHOR = {
+    "item1a_unknown": "item1a_risk",
+    "item1b_unknown": "item1b_unresolved",
+    "item1c_unknown": "item1c_cybersecurity",
+    "item7_unknown": "item7_mdna",
+    "item7a_unknown": "item7a_market_risk",
+    "item8_unknown": "item8_financials",
+    "item9a_unknown": "item9a_controls",
+    "item9b_unknown": "item9b_other",
+    "item9c_unknown": "item9c_foreign",
+}
+
+
+def _resolve_anchor(raw_anchor: str) -> str:
+    """Map unknown item anchors to canonical anchors where the section is unambiguous."""
+    return _ITEM_FALLBACK_ANCHOR.get(raw_anchor, raw_anchor)
+
+
+def _detect_heading_anchor(line: str) -> str | None:
+    """Detect section anchor from heading text (with or without 'Item X.' format).
+
+    Keyword-based detection only applies to short lines (< 120 chars) to
+    avoid false matches on body prose.
+    """
+    line = line.strip()
+    # Try traditional Item X. format first (with content validation)
+    if ITEM_HEADER_RE.match(line):
+        rest = ITEM_HEADER_RE.sub("", line).strip()
+        rest = re.sub(r"^[.:\s]+", "", rest)
+        # Require meaningful text after item number (prevents bare "Item 1A.")
+        if len(rest) > 3 and any(c.isalpha() for c in rest):
+            return item_header_to_anchor(line)
+        # Bare item number — still a heading, just use unknown anchor
+        # Only treat as heading if the line is very short and looks like a heading
+        if len(line) <= 15 and ITEM_HEADER_RE.match(line):
+            return item_header_to_anchor(line)
+        return None
+    # Try keyword-based for filings without Item numbers in headings
+    if len(line) <= 120:
+        for pattern, anchor in SECTION_HEADING_PATTERNS:
+            if pattern.search(line):
+                return _resolve_anchor(anchor)
+    return None
+
+XBRL_NOISE_PATTERNS = [
+    re.compile(r"^\?xml version"),
+    re.compile(r"^XBRL Document Created with"),
+    re.compile(r"^Copyright 20\d\d"),
+    re.compile(r"^r:[a-f0-9-]+,g:"),
+    re.compile(r"^https?://fasb\.org/"),
+    re.compile(r"^us-gaap:[A-Z]"),
+    re.compile(r"^\d{10}$"),
+    re.compile(r"^(FY|P1Y|true|false)$"),
+]
+
+
+def _strip_xbrl_noise(text: str) -> str:
+    """Remove residual XBRL metadata lines from extracted text."""
+    lines = text.split("\n")
+    filtered = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            filtered.append(line)
+            continue
+        if any(p.search(stripped) for p in XBRL_NOISE_PATTERNS):
+            continue
+        filtered.append(line)
+    return "\n".join(filtered)
+
 
 def html_to_text(html_path):
     with open(html_path) as f:
         soup = BeautifulSoup(f.read(), "lxml")
-    for tag in soup(["script", "style"]):
+    for tag in soup(["script", "style", "ix:hidden", "ix:resources", "ix:header"]):
         tag.decompose()
     text = soup.get_text(separator="\n")
     text = re.sub(r"\n{3,}", "\n\n", text)
+    text = _strip_xbrl_noise(text)
     return text
 
 
@@ -91,17 +188,8 @@ def chunk_text(text, ticker, period_end):
 
 
 def _is_item_header(line: str) -> bool:
-    """Return True for real Item headers like 'Item 1.    Business'.
-
-    TOC entries such as 'Item 1.' on their own line are excluded by requiring
-    alphabetic content after the item number.
-    """
-    line = line.strip()
-    if not ITEM_HEADER_RE.match(line):
-        return False
-    rest = ITEM_HEADER_RE.sub("", line).strip()
-    rest = re.sub(r"^[.:\s]+", "", rest)
-    return len(rest) > 3 and any(c.isalpha() for c in rest)
+    """Return True for real Item headers or keyword-based section headings."""
+    return _detect_heading_anchor(line) is not None
 
 
 def _table_to_text(table) -> str:
@@ -194,13 +282,24 @@ def _extract_segments(soup):
 
 
 def _split_prose_at_items(segments):
-    """Split prose segments at Item headers and tag every segment with its Item."""
+    """Split prose segments at Item headers and tag every segment with its Item.
+
+    Also checks table segments for heading text to detect section boundaries.
+    """
     result = []
     current_item = None
 
     for seg in segments:
         if seg["kind"] == "table":
             seg["item"] = current_item
+            # Check if table contains a section heading
+            table_lines = seg["text"].split("\n")
+            for line in table_lines:
+                line_stripped = line.strip()
+                if _is_item_header(line_stripped):
+                    current_item = line_stripped
+                    seg["item"] = current_item
+                    break
             result.append(seg)
             continue
 
@@ -255,12 +354,28 @@ def _split_prose_text(text: str, max_chars: int, target_chars: int) -> list:
     flush()
 
     # Any chunk still over max_chars gets split on single newlines.
+    def _append_chunk(text_str: str):
+        if len(text_str) <= max_chars:
+            final.append(text_str)
+            return
+        # Char-level fallback for oversized single-line text
+        pos = 0
+        while pos < len(text_str):
+            end = min(pos + max_chars, len(text_str))
+            if end < len(text_str):
+                space = text_str.rfind(" ", pos, end)
+                if space > pos + max_chars // 2:
+                    end = space + 1
+            snippet = text_str[pos:end].strip()
+            if snippet:
+                final.append(snippet)
+            pos = end
+
     final = []
     for chunk in chunks:
         if len(chunk) <= max_chars:
             final.append(chunk)
             continue
-        # Split on lines.
         lines = chunk.split("\n")
         buf = []
         buf_len = 0
@@ -269,28 +384,30 @@ def _split_prose_text(text: str, max_chars: int, target_chars: int) -> list:
             if not line:
                 continue
             if buf_len and buf_len + 1 + len(line) > max_chars:
-                final.append("\n".join(buf))
+                _append_chunk("\n".join(buf))
                 buf = [line]
                 buf_len = len(line)
             else:
                 buf.append(line)
                 buf_len += (1 + len(line)) if buf_len else len(line)
         if buf:
-            final.append("\n".join(buf))
+            _append_chunk("\n".join(buf))
     return final
 
 
-def _merge_small_prose_chunks(chunks: list, min_chars: int) -> list:
+def _merge_small_prose_chunks(chunks: list, min_chars: int, max_chars: int | None = None) -> list:
     """Backward-merge prose chunks below min_chars into adjacent prose chunks.
 
-    Tables stay atomic.
+    Tables stay atomic. Does not merge across different anchors.
+    If max_chars is provided, skips merges that would exceed it.
     """
     merged = []
     for chunk in chunks:
         if chunk["type"] == "prose" and len(chunk["text"]) < min_chars:
-            if merged and merged[-1]["type"] == "prose":
-                merged[-1]["text"] += "\n\n" + chunk["text"]
-                continue
+            if merged and merged[-1]["type"] == "prose" and merged[-1].get("anchor") == chunk.get("anchor"):
+                if max_chars is None or len(merged[-1]["text"]) + 2 + len(chunk["text"]) <= max_chars:
+                    merged[-1]["text"] += "\n\n" + chunk["text"]
+                    continue
         merged.append(chunk)
     return merged
 
@@ -367,7 +484,7 @@ def chunk_sectionaware(html_path: str, ticker: str, period_end: str) -> list:
     """Create section-aware chunks: Item boundaries, atomic tables, stable anchors."""
     with open(html_path) as f:
         soup = BeautifulSoup(f.read(), "lxml")
-    for tag in soup(["script", "style"]):
+    for tag in soup(["script", "style", "ix:hidden", "ix:resources", "ix:header"]):
         tag.decompose()
 
     segments = _extract_segments(soup)
@@ -408,7 +525,7 @@ def chunk_sectionaware(html_path: str, ticker: str, period_end: str) -> list:
         if item != current_item:
             flush_prose()
             current_item = item
-            current_item_anchor = item_header_to_anchor(item) if item else "item1_business"
+            current_item_anchor = _resolve_anchor(_detect_heading_anchor(item) or item_header_to_anchor(item)) if item else "item1_business"
             recent_prose_text = []
 
         if seg["kind"] == "table":
@@ -434,7 +551,7 @@ def chunk_sectionaware(html_path: str, ticker: str, period_end: str) -> list:
 
     flush_prose()
 
-    chunks = _merge_small_prose_chunks(chunks, SA_MIN_CHARS)
+    chunks = _merge_small_prose_chunks(chunks, SA_MIN_CHARS, max_chars=SA_MAX_CHARS)
 
     # Assign char_span, chunk_id, and page in the canonical reconstructed text.
     canonical = ""
@@ -469,31 +586,86 @@ def main():
         default="both",
         help="Chunking strategy to run (default: both).",
     )
+    parser.add_argument("--ticker", type=str, default="", help="Single ticker to chunk (default: all).")
+    parser.add_argument("--fy", type=str, default="", help="Fiscal year filter (e.g. FY2025). Requires --ticker.")
     args = parser.parse_args()
 
     os.makedirs(CHUNKS_DIR, exist_ok=True)
 
-    for ticker in TICKERS:
-        html_path = f"{RAW_DIR}/{ticker}_10k.html"
-        meta_path = f"{RAW_DIR}/{ticker}_10k_meta.json"
-        if not os.path.exists(html_path):
-            print(f"[skip] {ticker}: run fetch.py first")
-            continue
-        with open(meta_path) as f:
-            period_end = json.load(f)["period_end"]
+    selected = dict(TICKERS)
+    if args.ticker:
+        t = args.ticker.upper()
+        if t in TICKERS:
+            selected = {t: TICKERS[t]}
+        else:
+            print(f"[error] unknown ticker: {args.ticker}")
+            return
 
-        if args.strategy in ("fixedsize", "both"):
-            text = html_to_text(html_path)
-            chunks = chunk_text(text, ticker, period_end)
-            out_path = f"{CHUNKS_DIR}/{ticker}_fixedsize.json"
-            _write_chunks(out_path, chunks)
-            print(f"[fixedsize] {ticker}: {len(chunks)} chunks -> {out_path}")
+    for ticker in selected:
+        if args.fy:
+            fy = args.fy
+            html_path = f"{RAW_DIR}/{ticker}_{fy}_10k.html"
+            meta_path = f"{RAW_DIR}/{ticker}_{fy}_10k_meta.json"
+            if not os.path.exists(html_path):
+                print(f"[skip] {ticker} {fy}: run fetch.py first")
+                continue
+            with open(meta_path) as f:
+                period_end = json.load(f)["period_end"]
+            _chunk_ticker(ticker, period_end, fy, html_path, args.strategy)
+        else:
+            # Discover all year-suffixed files for this ticker
+            import glob as _glob
+            pattern = f"{RAW_DIR}/{ticker}_FY*_10k.html"
+            matches = _glob.glob(pattern)
+            if not matches:
+                # Fall back to v1 naming
+                html_path = f"{RAW_DIR}/{ticker}_10k.html"
+                meta_path = f"{RAW_DIR}/{ticker}_10k_meta.json"
+                if os.path.exists(html_path) and os.path.exists(meta_path):
+                    with open(meta_path) as f:
+                        period_end = json.load(f)["period_end"]
+                    fy = fiscal_year_label(period_end)
+                    _chunk_ticker(ticker, period_end, fy, html_path, args.strategy)
+                else:
+                    print(f"[skip] {ticker}: run fetch.py first")
+                continue
+            for html_path in sorted(matches):
+                base = os.path.basename(html_path)
+                fy = base.replace(f"{ticker}_", "").replace("_10k.html", "")
+                meta_path = html_path.replace("_10k.html", "_10k_meta.json")
+                with open(meta_path) as f:
+                    period_end = json.load(f)["period_end"]
+                _chunk_ticker(ticker, period_end, fy, html_path, args.strategy)
 
-        if args.strategy in ("sectionaware", "both"):
-            chunks = chunk_sectionaware(html_path, ticker, period_end)
-            out_path = f"{CHUNKS_DIR}/{ticker}_sectionaware.json"
-            _write_chunks(out_path, chunks)
-            print(f"[sectionaware] {ticker}: {len(chunks)} chunks -> {out_path}")
+
+CRITICAL_ANCHORS = ["item1a_risk", "item7_mdna", "item8_financials"]
+
+
+def _assert_anchor_coverage(chunks: list[dict], ticker: str, fiscal_year: str):
+    """Raise RuntimeError if any critical anchor is missing."""
+    anchors = {c.get("anchor") for c in chunks}
+    missing = [a for a in CRITICAL_ANCHORS if a not in anchors]
+    if missing:
+        raise RuntimeError(
+            f"Anchor coverage failed for {ticker} {fiscal_year}: missing {missing}. "
+            "Parser may need hardening."
+        )
+
+
+def _chunk_ticker(ticker, period_end, fy, html_path, strategy):
+    if strategy in ("fixedsize", "both"):
+        text = html_to_text(html_path)
+        chunks = chunk_text(text, ticker, period_end)
+        out_path = f"{CHUNKS_DIR}/{ticker}_{fy}_fixedsize.json"
+        _write_chunks(out_path, chunks)
+        print(f"[fixedsize] {ticker} {fy}: {len(chunks)} chunks -> {out_path}")
+
+    if strategy in ("sectionaware", "both"):
+        chunks = chunk_sectionaware(html_path, ticker, period_end)
+        _assert_anchor_coverage(chunks, ticker, fy)
+        out_path = f"{CHUNKS_DIR}/{ticker}_{fy}_sectionaware.json"
+        _write_chunks(out_path, chunks)
+        print(f"[sectionaware] {ticker} {fy}: {len(chunks)} chunks -> {out_path}")
 
 
 if __name__ == "__main__":

@@ -107,9 +107,11 @@ def generate_numerical():
     questions = []
     qid = 0
     for ticker in TICKERS:
-        meta = json.load(open(f"{RAW_DIR}/{ticker}_10k_meta.json"))
+        with open(f"{RAW_DIR}/{ticker}_10k_meta.json") as f:
+            meta = json.load(f)
         period_end = meta["period_end"]
-        cf = json.load(open(f"{RAW_DIR}/{ticker}_companyfacts.json"))
+        with open(f"{RAW_DIR}/{ticker}_companyfacts.json") as f:
+            cf = json.load(f)
         html_path = f"{RAW_DIR}/{ticker}_10k.html"
         for tag in NUMERICAL_TAGS:
             if tag in (

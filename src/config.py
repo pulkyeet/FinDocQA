@@ -1,3 +1,9 @@
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
 TICKERS = {
     "AAPL": "0000320193",
     "AMZN": "0001018724",
@@ -15,7 +21,7 @@ TICKER_10K_OFFSET = {
     "NVDA": 1,
 }
 
-USER_AGENT = "FinDocQA pulkyeet@gmail.com"
+USER_AGENT = os.environ.get("SEC_USER_AGENT") or "FinDocQA contact@findocqa.dev"
 SEC_RATE_LIMIT = 8
 
 RAW_DIR = "data/raw"
@@ -26,7 +32,7 @@ EVAL_DIR = "data/eval"
 CHUNK_SIZE_TOKENS = 600
 CHUNK_OVERLAP_TOKENS = 50
 
-# 8-config matrix axes (generation model is frozen in .opencode/agent/chat.md)
+# 8-config matrix axes (generation model is frozen in .opencode/opencode.json)
 CHUNK_STRATEGIES = ["fixedsize", "sectionaware"]
 
 EMBEDDING_MODELS = {
@@ -34,13 +40,57 @@ EMBEDDING_MODELS = {
     "e5-small": "intfloat/e5-small-v2",
 }
 
-# Legacy single-model alias used by W1 scripts until the matrix refactor lands.
-EMBEDDING_MODEL = EMBEDDING_MODELS["bge-small"]
-
 RERANKER_MODEL = "BAAI/bge-reranker-base"
 RERANK_TOP_K = 5
 
-OPENCODE_AGENT = "chat"
+OPENCODE_AGENT = "paid-chatter"
+OPENCODE_ATTACH = os.environ.get("OPENCODE_ATTACH")  # e.g. "http://localhost:4096"
+FAITHFULNESS_JUDGE = os.environ.get("FAITHFULNESS_JUDGE", "").lower() in ("1", "true", "yes")
+
+# OpenRouter API (v2 Delta LLM — preferred over opencode subprocess)
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 TOP_K_RETRIEVE = 20
 TOP_K_FINAL = 5
+
+# ── v2 Delta constants ──────────────────────────────────────────────────
+
+DELTA_YEARS_DEFAULT = 5
+DELTA_YEARS_MAX = 5
+DELTA_DIFFS_DIR = "data/diffs"
+DELTA_REPORTS_DIR = "data/reports"
+
+# Diff classification thresholds (tuned on 47-pair labeled sample)
+# Held-out (10 pairs): precision=0.300, recall=1.000, F1=0.462
+DIFF_THRESHOLD_UNCHANGED = 0.95
+DIFF_THRESHOLD_MINOR = 0.81
+DIFF_THRESHOLD_MAJOR = 0.60
+
+# Paragraph alignment
+ALIGN_SIMILARITY_FLOOR = 0.50  # below this, paragraphs are unmatched
+
+# Chunk size fix (v2) — embedding models cap at 512 tokens
+SA_TARGET_TOKENS = 350   # was 600
+SA_MAX_TOKENS = 500      # was 800
+SA_MIN_TOKENS = 100      # unchanged
+
+# XBRL tags for delta join (financially-loaded sections)
+XBRL_DELTA_TAGS = [
+    "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "ResearchAndDevelopmentExpense", "CostOfGoodsAndServicesSold",
+    "GrossProfit", "OperatingIncomeLoss", "NetIncomeLoss",
+    "IncomeLossFromContinuingOperationsBeforeIncomeTaxes",
+    "SellingGeneralAndAdministrativeExpense",
+    "NetCashProvidedByUsedInOperatingActivities",
+    "NetCashProvidedByUsedInInvestingActivities",
+    "NetCashProvidedByUsedInFinancingActivities",
+    "Assets", "Liabilities", "StockholdersEquity",
+    "LongTermDebtNoncurrent", "CashAndCashEquivalentsAtCarryingValue",
+]
+
+
+def sanitize_prompt(text: str) -> str:
+    """Strip ASCII control characters (except tab/newline/return) from prompt text."""
+    return "".join(c for c in text if c == "\t" or c == "\n" or c == "\r" or c >= " ")
