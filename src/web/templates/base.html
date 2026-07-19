@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}FinDocQA Delta{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <style>
+    .nav-bar .nav-brand { font-size: var(--text-body-md); font-weight: 600; color: var(--color-primary); text-decoration: none; }
+    .nav-bar .nav-right { margin-left: auto; display: flex; gap: var(--space-lg); align-items: center; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="nav-bar">
+    <a href="/" class="nav-brand">FinDocQA Delta</a>
+    <a href="/" class="nav-link">Home</a>
+    <div class="nav-right">
+      {% block nav_extra %}{% endblock %}
+    </div>
+  </nav>
+
+  {% block content %}{% endblock %}
+
+  <footer class="footer">
+    FinDocQA Delta — Filing Change Intelligence Engine<br>
+    <span class="caption">All claims trace to deterministic diff records.</span>
+  </footer>
+</body>
+</html>

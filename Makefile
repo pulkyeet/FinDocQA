@@ -1,6 +1,9 @@
 PY ?= python3
 
-.PHONY: eval fetch chunk embed clean-results test
+.PHONY: eval fetch chunk embed clean-results test delta delta-batch delta-no-llm web
+
+TICKER ?= AAPL
+YEARS ?= 5
 
 eval:
 	cd src && $(PY) run_eval.py
@@ -19,3 +22,15 @@ test:
 
 clean-results:
 	rm -f src/data/eval/results.csv src/data/eval/results_prev.csv
+
+delta:
+	cd src && $(PY) delta.py $(TICKER) --years $(YEARS)
+
+delta-batch:
+	cd src && $(PY) delta.py --all --years $(YEARS)
+
+delta-no-llm:
+	cd src && $(PY) delta.py $(TICKER) --years $(YEARS) --no-llm
+
+web:
+	cd src && uvicorn web.app:app --reload --port 8000

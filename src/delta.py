@@ -23,7 +23,8 @@ from chunk import chunk_sectionaware, _write_chunks
 from delta.align import load_chunks_for_year
 from delta.diff import diff_all_sections, write_diff_records, churn_summary, classification_counts
 from delta.xbrl_delta import load_companyfacts, compute_yoy_deltas
-from config import XBRL_DELTA_TAGS
+from delta.report import build_report_data, render_html, render_cli_summary, write_report, write_interpretations, build_report_index
+from config import XBRL_DELTA_TAGS, DELTA_REPORTS_DIR
 
 SECTION_NAMES = {
     "item1_business": "Business (1)",
@@ -97,6 +98,7 @@ def run_delta(ticker, years, no_llm=False):
     print(f"\n[stage 1-2] fetch + chunk...")
     meta_records = fetch_ticker(ticker, cik, years)
     fys = [r["fiscal_year"] for r in meta_records]
+    entity_name = meta_records[0].get("entity_name", ticker) if meta_records else ticker
     chunk_ticker(ticker, fys)
 
     chunks_by_year = {}
@@ -155,30 +157,31 @@ def run_delta(ticker, years, no_llm=False):
         n_trends = len([v for v in trends.values() if v])
         print(f"  {n_trends} trend narratives generated")
 
-        # Print top material changes
-        print(f"\n[summary] Top material changes:")
-        material = []
-        for anchor, interps in interpretations.items():
-            section_name = SECTION_NAMES.get(anchor, anchor)
-            for ir in interps:
-                if ir.get("materiality") == "material" and not ir.get("_unvalidated"):
-                    material.append((anchor, section_name, ir))
-        material.sort(key=lambda x: x[2].get("_churn", 0), reverse=True)
-        for anchor, section_name, ir in material[:5]:
-            print(f"\n  {section_name}")
-            print(f"    Change: {ir.get('change_type', '?')}")
-            print(f"    {ir.get('summary', '')}")
-            why = ir.get("why_it_matters")
-            if why:
-                print(f"    Why it matters: {why}")
+        print(f"\n[stage 9] Report rendering...")
+        report_data = build_report_data(
+            ticker, records_by_year, interpretations, trends,
+            xbrl_deltas, entity_name,
+        )
+        write_interpretations(interpretations, trends, ticker, year_pairs)
 
-            old_q = ir.get("old_quote")
-            new_q = ir.get("new_quote")
-            if old_q and new_q:
-                print(f"    Old [{ir.get('_y_old', '')}]: \"{old_q[:150]}\"")
-                print(f"    New [{ir.get('_y_new', '')}]: \"{new_q[:150]}\"")
+        html = render_html(report_data)
+        report_path = write_report(ticker, html)
+        print(f"  Report written: {report_path}")
+
+        print(render_cli_summary(report_data))
 
     print(f"\n[complete] Delta pipeline finished for {ticker}")
+
+
+def _write_report_index(tickers):
+    """Write data/reports/index.html listing all ticker reports."""
+    import os
+    html = build_report_index(tickers)
+    os.makedirs(DELTA_REPORTS_DIR, exist_ok=True)
+    path = os.path.join(DELTA_REPORTS_DIR, "index.html")
+    with open(path, "w") as f:
+        f.write(html)
+    print(f"\n[report index] {path}")
 
 
 def main():
@@ -210,6 +213,9 @@ def main():
 
     for ticker in selected:
         run_delta(ticker, years, no_llm=args.no_llm)
+
+    if len(selected) > 1:
+        _write_report_index(selected)
 
 
 if __name__ == "__main__":

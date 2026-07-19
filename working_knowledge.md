@@ -6,34 +6,33 @@
 
 ## Always-on habits
 
-### 1. The `opencode serve` shortcut (cut LLM cold start from ~5s to ~1s)
+### 1. OpenRouter is the primary LLM backend (replaces opencode serve)
 
-`opencode run` by default spawns a new process and loads the model each
-call (3–5s cold start). For batch jobs (eval, Delta interpretation,
-any test sweep), start the server once in a separate terminal and use
-`--attach`:
+`interpret.py:call_llm()` branches on `OPENROUTER_API_KEY`:
 
+- **Key present** → calls `https://openrouter.ai/api/v1/chat/completions` via HTTP POST.
+  One request per batch, 2–5s latency, no subprocess overhead.
+- **No key** → falls back to `opencode run --agent paid-chatter` as a subprocess.
+  Slower (~30s per call due to process spawn) but works without API key.
+
+**Setup:**
 ```bash
-# Terminal A — leave running
-opencode serve --port 4096
-
-# Terminal B — your actual work
-cd /home/pulkyeet/findocQA/FinDocQA
-# (The agent should remind you to start the server in another
-# terminal before running make eval, make delta-batch, or any batch LLM sweep.)
+# Add to src/.env:
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+# Optional: override model
+OPENROUTER_MODEL=deepseek/deepseek-v4-flash
 ```
 
-`opencode run` then accepts `--attach http://localhost:4096` and skips
-the model load. Saves ~3–4s per LLM call. For the 448-call v1 eval this
-shaves ~20–30 minutes. For Delta's ~40-50 LLM calls per ticker × 7
-tickers, it shaves ~15-20 minutes off a full batch.
+Default model is `deepseek/deepseek-v4-flash`. Cost is ~$0.02 per ticker with
+gpt-4o-mini. The `.env` file is loaded by `config.py` via `python-dotenv`.
 
-**If the agent is about to run `make eval`, `make delta-batch`, or any
-batch LLM test sweep, it should pause and ask: "Is `opencode serve
---port 4096` running in another terminal? If not, start it there
-before I proceed."**
+### 2. The LLM generation agent is `paid-chatter`
 
-### 2. Data layer is gitignored
+`config.py:OPENCODE_AGENT = "paid-chatter"` — a system agent with no tools.
+Only used when OpenRouter is unavailable (fallback path). Never use `build` —
+it has bash/read/write tools and will try to call them instead of answering.
+
+### 3. Data layer is gitignored
 
 `data/raw/`, `data/chunks/`, `data/chroma/`, `data/eval/results.csv`,
 `data/diffs/`, `data/reports/` are all gitignored. Re-running
@@ -42,7 +41,7 @@ from scratch (raw fetches are cached by file existence; chunk/embed/delta
 always overwrite). The raw layer is the single source of truth for
 reproducibility — never edit a 10-K by hand.
 
-### 3. All scripts run from `src/`
+### 4. All scripts run from `src/`
 
 ```bash
 cd src
@@ -63,15 +62,13 @@ The `Makefile` lives at the repo root and `cd src` for you.
 
 - **Python**: 3.11.9 at `~/.pyenv/versions/3.11.9/`. Deps in `requirements.txt`
   (v1: chromadb, sentence-transformers, beautifulsoup4, lxml, python-dotenv,
-  duckduckgo-search, streamlit, pandas, torch; v2 adds: fastapi, uvicorn, jinja2).
+  duckduckgo-search, streamlit, pandas, torch; v2 adds: fastapi, uvicorn, jinja2, requests).
 - **Models cached at**: `~/.cache/huggingface/` (HuggingFace download cache;
   first run downloads, subsequent runs are fast).
-- **Auth**: `~/.local/share/opencode/auth.json` (shared opencode-go key).
-  No env var, no `.env`. If it expires: `opencode auth login` (interactive).
-- **HF rate-limit warning**: you'll see *"You are sending unauthenticated
-  requests to the HF Hub. Please set a HF_TOKEN to enable higher rate
-  limits."* on first model load. It still works without the token; the
-  warning is informational. Set `HF_TOKEN` in your shell to silence it.
+- **HF token**: Set in `src/.env` as `HF_TOKEN=hf_...`. Silences rate-limit warnings
+  and speeds up model downloads.
+- **OpenRouter key**: Set in `src/.env` as `OPENROUTER_API_KEY=sk-or-v1-...`.
+  If unset, Delta falls back to `opencode run` subprocess calls.
 
 ## v2 file naming convention (IMPORTANT)
 
@@ -84,29 +81,42 @@ v2 uses year-suffixed file names for multi-year support:
 The fiscal year label comes from `fiscal_year_label(period_end)` in `fetch.py`.
 Example: `period_end="2025-09-27"` → `"FY2025"`.
 
-Existing v1 files (FY2025) are renamed to include the `FY2025` suffix in
-phase 00. `embed.py:load_chunks` is updated to glob `{ticker}_FY*_{strategy}.json`.
-
-## v2 chunking fixes (IMPORTANT — discovered during planning)
+## v2 chunking fixes (IMPORTANT)
 
 Three fixes to `chunk.py` in phase 00:
 1. **HTML cleaning:** strip `ix:hidden`, `ix:resources`, `ix:header` from DOM
-   before `get_text()`. Add `_strip_xbrl_noise()` text filter. Current chunks
-   contain 1,924 us-gaap tag refs + 625 entity IDs = garbage.
+   before `get_text()`. Add `_strip_xbrl_noise()` text filter with 8 noise patterns.
 2. **Size fix:** `SA_MAX_TOKENS` 800→500, `SA_TARGET_TOKENS` 600→350. The
    embedding models (bge-small, e5-small) cap at 512 tokens; 38% of v1 chunks
-   were silently truncated.
+   were silently truncated. Includes char-level fallback split for oversized
+   single-line text, and merge-across-anchors guard to prevent section boundary
+   corruption.
 3. **Paragraph bridge:** `split_into_paragraphs()` in `delta/align.py` splits
    chunk text on `\n\n` into paragraphs. Delta works at paragraph level, not
    chunk level. The chunk is just storage.
+
+## v2 chunking gotchas discovered during build
+
+- **Heading detection:** AMZN and similar filings put section headings inside
+  TABLE elements (mini-TOC dividers), not prose. `_split_prose_at_items()` now
+  checks table segments for heading text.
+- **Keyword-based fallback:** For filings that don't use "Item X." format in
+  body headings, `SECTION_HEADING_PATTERNS` in `chunk.py` matches section names
+  like "Risk Factors" → `item1a_risk`.
+- **MSFT split headers:** Some MSFT filings split headings across lines (e.g.,
+  "ITEM 1A. RIS" / "K FACTORS"). Fallback mapping `_ITEM_FALLBACK_ANCHOR` resolves
+  `item1a_unknown` → `item1a_risk`.
+- **Merge guard:** `_merge_small_prose_chunks` does NOT merge across anchor
+  boundaries, preventing NVDA's Item 8 intro text from being swallowed into
+  neighboring sections.
 
 ## Recurring gotchas
 
 - **`opencode run` agent must be a no-tools agent, not `build`.** The default
   `build` agent has bash/read/write tools and will try to call them
-  instead of answering. The generation agent (`chatter`) is set in
-  `config.py:OPENCODE_AGENT`. Both v1 (`query.py`, `run_eval.py`) and v2
-  (`delta/interpret.py`) use this agent.
+  instead of answering. `config.py:OPENCODE_AGENT = "paid-chatter"` is a
+  system agent with no tools. Both v1 (`query.py`, `run_eval.py`) and v2
+  (`delta/interpret.py`) use this agent as the fallback path.
 - **Chroma batch limit is 5461.** `embed.py` chunks `collection.add()`
   into ≤5000-row batches for this reason.
 - **E5 models need instruction prefixes.** E5 query strings need
@@ -140,42 +150,59 @@ Three fixes to `chunk.py` in phase 00:
   record's `old_text` and `new_text` (literal `in` test). Failures trigger
   one retry, then render with diff but without interpretation, flagged
   `[unvalidated]`.
+- **Interpretation batching (v2):** `BATCH_SIZE = 5` in `interpret.py`. Smaller
+  batches produce a 100% validation rate but more API calls. Larger batches
+  produce malformed JSON from the LLM.
+- **Text truncation (v2):** `old_text`/`new_text` truncated to 500 chars before
+  sending to LLM. The original 2000-char chunks balloon prompts beyond what the
+  model can handle in structured JSON format.
+- **Model cache (v2):** `align.py` caches the SentenceTransformer model.
+  Loading the model per section (20+ times per year pair) was the original
+  cause of the pipeline appearing to hang at stage 3-5.
+- **Numeric-blindness gap (v2):** cosine-similarity classification is blind
+  to numeric value changes. A paragraph where only dollar amounts change
+  scores ~0.99 → classified `unchanged` → LLM never sees it. XBRL deltas ARE
+  computed but never used to override classifications. See tracker.md
+  "Future work" section for the planned XBRL guard fix.
+- **Fiscal year matching in companyfacts:** AAPL's `Revenues` tag has data
+  only through FY2018 (old revenue standard). Current tag is
+  `RevenueFromContractWithCustomerExcludingAssessedTax` (ASC 606).
+  `fiscal_year_value()` prefers 10-K (annual) entries over quarterly ones.
+
+## Diff classification thresholds
+
+Tuned on 48-pair labeled sample (5 sections × 2 year pairs from AAPL):
+
+| Threshold | Value | Meaning |
+|---|---|---|
+| `DIFF_THRESHOLD_UNCHANGED` | 0.95 | Cosine ≥ 0.95 → unchanged |
+| `DIFF_THRESHOLD_MINOR` | 0.81 | Cosine ≥ 0.81 → modified_minor |
+| `DIFF_THRESHOLD_MAJOR` | 0.60 | Cosine ≥ 0.60 → modified_major |
+
+Held-out (10 pairs): precision=0.300, recall=1.000, F1=0.462.
+High recall is intentional — we'd rather over-flag changes and let the
+LLM classify them as boilerplate than miss real changes.
 
 ## Quick verification commands
 
 ```bash
-# v1: Is the corpus complete? (all 7 filings cached)
-ls data/raw/*_10k.html | wc -l   # expect 7 (v1 naming) or 35 (v2 naming)
-
 # v2: Is the multi-year corpus complete?
-ls data/raw/*_FY*_10k.html | wc -l   # expect 35 (7 tickers × 5 years)
+ls data/raw/*_FY*_10k.html | wc -l   # expect ~30 (varies by ticker history)
 
 # v2: Are chunks built for all years?
-ls data/chunks/*_FY*_sectionaware.json | wc -l   # expect 35
+ls data/chunks/*_FY*_sectionaware.json | wc -l   # expect ~30
 
 # v2: Are diff records built?
-ls data/diffs/AAPL/   # expect 4 year-pair .jsonl files
+ls data/diffs/AAPL/   # expect year-pair .jsonl files
 
-# v2: Are reports built?
-ls data/reports/*.html   # expect 7 (one per ticker)
+# v2: Run diff-only (no LLM, instant)
+cd src && python delta.py AAPL --years 2 --no-llm
 
-# v1: Are the 4 Chroma collections built?
-python -c "import chromadb; c=chromadb.PersistentClient('data/chroma'); print([x.name for x in c.list_collections()])"
-
-# v1: Is the eval set built?
-wc -l data/eval/questions.jsonl   # expect 56
-
-# v2: Run the full Delta pipeline for one ticker
-cd src && python delta.py AAPL --years 5
-
-# v2: Run diff-only (no LLM, fast)
-cd src && python delta.py AAPL --years 5 --no-llm
+# v2: Run full pipeline with OpenRouter
+cd src && python delta.py AAPL --years 2
 
 # v2: Batch all tickers
 make delta-batch
-
-# v2: Start the web app
-make web   # then visit http://localhost:8000
 
 # v1: Streamlit dashboard
 streamlit run src/dashboard.py
@@ -190,10 +217,6 @@ Always prefer the cheapest check first:
 1. **Diff-only** (`--no-llm`): fetch + chunk + align + diff. No LLM calls.
    Fast, deterministic. Use for verifying the pipeline shape.
 2. **Retrieval-only** (v1: Python embedding + chroma, no LLM): for v1 RAG checks.
-3. **Full pipeline** (`python delta.py AAPL --years 5`): includes LLM
-   interpretation. Slow (~40-50 LLM calls per ticker). Only when the user
+3. **Full pipeline** (`python delta.py AAPL --years 2`): includes OpenRouter
+   LLM interpretation. ~1-2 min per ticker. Only when the user
    explicitly wants generated interpretations.
-
-If the user is about to run a **batch** LLM test (more than ~5 calls),
-remind them: *"Start `opencode serve --port 4096` in a separate
-terminal first — it'll cut per-call latency by ~4x."*
