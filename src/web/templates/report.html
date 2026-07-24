@@ -1,257 +1,256 @@
 {% extends "base.html" %}
 {% block title %}{{ report.ticker }} — Delta Change Report{% endblock %}
-{% block head %}
-<style>
-  .report-header {
-    padding: var(--space-5xl) var(--space-3xl) var(--space-3xl);
-    text-align: center;
-  }
-  .report-header .ticker { color: var(--color-primary); font-family: var(--font-mono); font-size: var(--text-display-lg); }
-  .report-header .entity { color: var(--color-ink); font-size: var(--text-display-sm); margin-top: var(--space-sm); }
-  .report-header .meta { color: var(--color-mute); font-size: var(--text-body-sm); margin-top: var(--space-md); }
-  .report-header .year-range { font-family: var(--font-mono); color: var(--color-primary-soft); }
-  .report-header .generated { color: var(--color-mute); font-size: var(--text-caption); margin-top: var(--space-sm); }
-</style>
-{% endblock %}
 
-{% block content %}
-<div class="report-header">
-  <div class="ticker">{{ report.ticker }}</div>
-  <div class="entity">{{ report.entity_name }}</div>
-  <div class="meta">
-    <span class="year-range">{{ report.year_range[0] }} &rarr; {{ report.year_range[-1] }}</span>
-    &middot; {{ report.sections|length }} sections analyzed
-  </div>
-  <div class="generated">Generated {{ report.generated_at }}</div>
-</div>
-
-<div class="green-divider-band"></div>
-
-<div class="report-container">
-
-  {# ── Summary stats ── #}
-  <section style="padding-top: var(--space-4xl); padding-bottom: var(--space-2xl);">
-    <div class="summary-stat-grid">
-      {% set total_changes = namespace(v=0) %}
-      {% set material_count = namespace(v=0) %}
-      {% set notable_count = namespace(v=0) %}
-      {% set boilerplate_count = namespace(v=0) %}
-      {% set unvalidated_count = namespace(v=0) %}
-      {% for section in report.sections %}
-        {% for ch in section.changes %}
-          {% set total_changes.v = total_changes.v + 1 %}
-          {% if ch.materiality == "material" %}{% set material_count.v = material_count.v + 1 %}
-          {% elif ch.materiality == "notable" %}{% set notable_count.v = notable_count.v + 1 %}
-          {% elif ch.materiality == "boilerplate" %}{% set boilerplate_count.v = boilerplate_count.v + 1 %}
-          {% endif %}
-          {% if ch._unvalidated %}{% set unvalidated_count.v = unvalidated_count.v + 1 %}{% endif %}
-        {% endfor %}
-      {% endfor %}
-      <div class="summary-stat">
-        <div class="stat-value">{{ total_changes.v }}</div>
-        <div class="stat-label">Total Changes</div>
-      </div>
-      <div class="summary-stat">
-        <div class="stat-value">{{ material_count.v }}</div>
-        <div class="stat-label">Material</div>
-      </div>
-      <div class="summary-stat">
-        <div class="stat-value">{{ notable_count.v }}</div>
-        <div class="stat-label">Notable</div>
-      </div>
-      <div class="summary-stat">
-        <div class="stat-value">{{ boilerplate_count.v }}</div>
-        <div class="stat-label">Boilerplate</div>
-      </div>
-    </div>
-  </section>
-
-  {# ── XBRL deltas ── #}
-  {% if report.xbrl_deltas %}
-  <section style="padding: var(--space-2xl) 0;">
-    <h2 class="display-sm" style="color: var(--color-ink-strong);">Key Financial Metrics (XBRL)</h2>
-    <table class="xbrl-summary-table" style="margin-top: var(--space-lg);">
-      <thead>
-        <tr>
-          <th>Metric</th>
-          {% for yp in report.xbrl_deltas._year_pairs %}
-          <th class="num">{{ yp }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for tag_name in report.xbrl_deltas._tag_order %}
-        {% set tag_data = report.xbrl_deltas[tag_name] %}
-        <tr>
-          <td class="tag-name">{{ tag_name }}</td>
-          {% for yp in report.xbrl_deltas._year_pairs %}
-          {% set yp_data = tag_data.get(yp, {}) %}
-          <td class="num">
-            {% if yp_data.pct_change is not none %}
-            <span class="{% if yp_data.pct_change > 0 %}pct-positive{% elif yp_data.pct_change < 0 %}pct-negative{% else %}num{% endif %}">
-              {{ '%+.1f'|format(yp_data.pct_change) }}%
-            </span>
-            {% else %}
-            <span class="caption">&mdash;</span>
-            {% endif %}
-          </td>
-          {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </section>
+{% macro pct_chip(d) %}
+  {% if d and d.pct_change is not none %}
+    {% set p = d.pct_change %}
+    <span class="{% if p > 0.05 %}pct-up{% elif p < -0.05 %}pct-down{% else %}pct-flat{% endif %}">{% if p > 0 %}▲{% elif p < 0 %}▼{% else %}•{% endif %} {{ '%.1f'|format(p|abs) }}%</span>
+  {% else %}
+    <span class="pct-flat">—</span>
   {% endif %}
-
-  {# ── Churn scores table ── #}
-  <section style="padding: var(--space-2xl) 0;">
-    <h2 class="display-sm" style="color: var(--color-ink-strong); margin-bottom: var(--space-lg);">Churn Scores</h2>
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Section</th>
-          {% for yp in report._year_pairs %}
-          <th class="num">{{ yp[1] }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for section in report.sections %}
-        <tr>
-          <td><a href="#{{ section.anchor }}" style="color: var(--color-primary-soft); text-decoration: none;">{{ section.section_name }}</a></td>
-          {% for yp in report._year_pairs %}
-          {% set yp_key = yp[0] ~ "-" ~ yp[1] %}
-          {% set score = section.churn_scores.get(yp_key) %}
-          <td>
-            {% if score is not none %}
-            <div style="display: flex; align-items: center; gap: var(--space-sm);">
-              <span class="code" style="color: var(--color-body); min-width: 38px; text-align: right;">{{ '%.2f'|format(score) }}</span>
-              <div class="churn-bar-bg" style="flex: 1; min-width: 40px;">
-                <div class="churn-bar" style="width: {{ '%d'|format(score * 100) }}%;"></div>
-              </div>
-            </div>
-            {% else %}
-            <span class="caption">&mdash;</span>
-            {% endif %}
-          </td>
-          {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </section>
-
-  {# ── Section nav ── #}
-  <div class="section-nav">
-    <span class="body-sm-strong" style="color: var(--color-mute); margin-right: var(--space-sm);">Jump to:</span>
-    {% for section in report.sections %}
-    <a href="#{{ section.anchor }}">{{ section.section_name }}</a>
-    {% endfor %}
-  </div>
-
-  {# ── Material + Notable changes per section ── #}
-  {% for section in report.sections %}
-  <section id="{{ section.anchor }}" class="report-section">
-    <div class="section-header">
-      <h2 class="display-md section-anchor">{{ section.section_name }}</h2>
-      <div class="section-year-range">{{ report.year_range[0] }} &rarr; {{ report.year_range[-1] }}</div>
-    </div>
-
-    {% set material_changes = section.changes | selectattr("materiality", "equalto", "material") | list %}
-    {% set notable_changes = section.changes | selectattr("materiality", "equalto", "notable") | list %}
-    {% set boilerplate_changes = section.changes | selectattr("materiality", "equalto", "boilerplate") | list %}
-    {% set unvalidated_changes = section.changes | selectattr("_unvalidated") | list %}
-
-    {% if material_changes %}
-    <h3 class="body-md-strong materiality-material" style="margin-bottom: var(--space-lg); text-transform: uppercase; letter-spacing: 1px;">Material Changes</h3>
-    <div class="change-grid">
-      {% for ch in material_changes %}
-      {{ change_card(ch) }}
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if notable_changes %}
-    <h3 class="body-md-strong materiality-notable" style="margin: var(--space-3xl) 0 var(--space-lg); text-transform: uppercase; letter-spacing: 1px;">Notable Changes</h3>
-    <div class="change-grid">
-      {% for ch in notable_changes %}
-      {{ change_card(ch) }}
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if material_changes|length == 0 and notable_changes|length == 0 and boilerplate_changes|length > 0 %}
-    <div class="boilerplate-details">
-      <details>
-        <summary>{{ boilerplate_changes|length }} boilerplate change{% if boilerplate_changes|length > 1 %}s{% endif %} suppressed. Show all.</summary>
-        <div class="change-grid" style="margin-top: var(--space-lg);">
-          {% for ch in boilerplate_changes %}
-          {{ change_card(ch) }}
-          {% endfor %}
-        </div>
-      </details>
-    </div>
-    {% endif %}
-
-    {% if unvalidated_changes %}
-    <div style="margin-top: var(--space-lg);">
-      <p class="caption">&#9888; {{ unvalidated_changes|length }} unvalidated change{% if unvalidated_changes|length > 1 %}s{% endif %} (quotes do not match diff records verbatim).</p>
-    </div>
-    {% endif %}
-
-    {% if section.trend_narrative %}
-    <div class="trend-narrative">{{ section.trend_narrative }}</div>
-    {% endif %}
-  </section>
-  {% endfor %}
-
-</div>
-{% endblock %}
+{% endmacro %}
 
 {% macro change_card(ch) %}
-<div class="card-feature {% if ch._unvalidated %}" style="border-color: var(--color-error);"{% else %}"{% endif %}>
-  {% if ch._unvalidated %}
-  <span class="unvalidated-flag" style="margin-bottom: var(--space-sm); display: inline-block;">&#9888; unvalidated</span>
-  {% endif %}
-
-  <div class="change-card-header">
+{% set mcode = 'mat' if ch.materiality == 'material' else ('not' if ch.materiality == 'notable' else 'boi') %}
+<div class="change-card {{ 'invalid' if ch._unvalidated else mcode }}">
+  <div class="cc-head">
     <span class="change-type-tag change-type-{{ ch.change_type }}">{{ ch.change_type }}</span>
-    <span class="button-pill-tag materiality-{{ ch.materiality }}">{{ ch.materiality }}</span>
-    <span class="caption" style="font-family: var(--font-mono);">{{ ch._y_old }} &rarr; {{ ch._y_new }}</span>
-    {% if ch.classification %}
-    <span class="caption" style="color: var(--color-mute);">({{ ch.classification }})</span>
-    {% endif %}
+    <span class="mpill {{ mcode }}">{{ ch.materiality }}</span>
     {% if ch.numeric_guard %}
-    <span class="caption" style="font-family: var(--font-mono); color: var(--color-primary); border: 1px solid var(--color-primary); border-radius: 999px; padding: 0 var(--space-xs);"
-          title="{% if ch.numeric_guard.source == 'xbrl' %}{{ ch.numeric_guard.tag }}: {% endif %}{{ ch.numeric_guard.old }} &rarr; {{ ch.numeric_guard.new }}">
-      &#916; {{ (ch.numeric_guard.pct * 100) | round(0) | int }}%{% if ch.numeric_guard.source == 'xbrl' %} &middot; XBRL{% endif %}
-    </span>
+    <span class="guard-pill" title="{% if ch.numeric_guard.source == 'xbrl' %}{{ ch.numeric_guard.tag }}: {% endif %}{{ ch.numeric_guard.old }} → {{ ch.numeric_guard.new }}">Δ {{ (ch.numeric_guard.pct * 100) | round(0) | int }}%{% if ch.numeric_guard.source == 'xbrl' %} · XBRL{% endif %}</span>
     {% endif %}
+    {% if ch._unvalidated %}<span class="unvalidated-flag">&#9888; unvalidated</span>{% endif %}
+    <span class="cc-years">{{ ch._y_old }} → {{ ch._y_new }}</span>
   </div>
 
-  <p class="body-md" style="margin-bottom: var(--space-sm);">{{ ch.summary }}</p>
+  <p class="cc-summary">{{ ch.summary }}</p>
 
   {% if ch.why_it_matters %}
-  <p class="body-sm" style="color: var(--color-primary-soft); margin-bottom: var(--space-md);">
-    Why it matters: {{ ch.why_it_matters }}
-  </p>
+  <div class="cc-why"><b>Why it matters</b> — {{ ch.why_it_matters }}</div>
   {% endif %}
 
   {% if ch.old_quote or ch.new_quote %}
-  <div class="quote-comparison">
-    <div class="quote-block">
-      <div class="quote-label">Old<span class="year-tag">{{ ch._y_old }}</span></div>
-      <div class="quote-text {% if ch._unvalidated %}amber-accent{% else %}green-accent{% endif %}">{{ ch.old_quote or "(no quote)" }}</div>
+  <div class="cc-quotes">
+    <div class="q old">
+      <div class="q-lbl"><span>Was</span><span class="yr">{{ ch._y_old }}</span></div>
+      <div class="q-txt">{{ ch.old_quote or "—" }}</div>
     </div>
-    <div class="quote-block">
-      <div class="quote-label">New<span class="year-tag">{{ ch._y_new }}</span></div>
-      <div class="quote-text {% if ch._unvalidated %}amber-accent{% else %}green-accent{% endif %}">{{ ch.new_quote or "(no quote)" }}</div>
+    <div class="q new">
+      <div class="q-lbl"><span>Now</span><span class="yr">{{ ch._y_new }}</span></div>
+      <div class="q-txt">{{ ch.new_quote or "—" }}</div>
     </div>
   </div>
   {% endif %}
 
-  <div class="caption" style="margin-top: var(--space-sm);">
-    <span class="code" style="font-size: var(--text-caption); color: var(--color-mute);">id: {{ ch.change_id }}</span>
-  </div>
+  <div class="cc-foot">{{ ch.change_id }}</div>
 </div>
 {% endmacro %}
+
+{% block content %}
+<div class="report-progress" id="progress"></div>
+
+{# ── Hero ── #}
+<header class="report-hero">
+  <div class="hero-eyebrow">Change Report · Five-Year Filing Intelligence</div>
+  <div class="hero-title">
+    <span class="hero-ticker">{{ report.ticker }}</span>
+    <span class="hero-entity">{{ report.entity_name }}</span>
+  </div>
+  <p class="hero-summary">
+    <b>{{ report.summary.material }}</b> material and <b>{{ report.summary.notable }}</b> notable
+    change{{ 's' if report.summary.notable != 1 }} across <b>{{ report.summary.sections_with_content }}</b>
+    sections, spanning {{ report.year_range[0] }} to {{ report.year_range[-1] }}.{% if report.summary.guard %}
+    <b>{{ report.summary.guard }}</b> numeric shift{{ 's' if report.summary.guard != 1 }} were surfaced by the
+    XBRL guard that cosine similarity alone would have missed.{% endif %}
+  </p>
+  <div class="hero-meta">
+    <span class="hero-chip"><span class="k">period</span> {{ report.year_range[0] }} → {{ report.year_range[-1] }}</span>
+    <span class="hero-chip"><span class="k">$</span> delta {{ report.ticker }} --years {{ report.year_range|length }}</span>
+    <span class="hero-gen">Generated {{ report.generated_at }}</span>
+  </div>
+</header>
+
+{# ── At-a-glance stats ── #}
+<div class="stat-row">
+  <div class="stat-card"><div class="v material">{{ report.summary.material }}</div><div class="l">Material</div></div>
+  <div class="stat-card"><div class="v notable">{{ report.summary.notable }}</div><div class="l">Notable</div></div>
+  <div class="stat-card"><div class="v">{{ report.summary.boilerplate }}</div><div class="l">Boilerplate</div></div>
+  <div class="stat-card"><div class="v accent">{{ report.summary.guard }}</div><div class="l">Numeric&nbsp;Guard</div></div>
+  <div class="stat-card"><div class="v">{{ report.summary.sections_with_content }}</div><div class="l">Sections</div></div>
+</div>
+
+<div class="report-layout">
+  {# ── Sticky TOC ── #}
+  <aside class="report-toc">
+    <nav class="toc-list" id="toc">
+      <a href="#financials" class="toc-item"><span>Financial Metrics</span></a>
+      <a href="#churn" class="toc-item"><span>Churn Overview</span></a>
+    </nav>
+    <div class="toc-eyebrow">Sections</div>
+    <nav class="toc-list" id="toc-sections">
+      {% for section in report.sections if section.has_content %}
+      <a href="#{{ section.anchor }}" class="toc-item" data-target="{{ section.anchor }}">
+        <span>{{ section.section_name }}</span>
+        {% if section.n_surfaced %}<span class="badge">{{ section.n_surfaced }}</span>{% endif %}
+      </a>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <main class="report-main">
+
+    {# ── Financial metrics ── #}
+    {% if report.xbrl_deltas and report.xbrl_deltas._tag_order %}
+    <section id="financials">
+      <div class="block-head">
+        <h2>Key Financial Metrics</h2>
+        <span class="note">Sourced from XBRL — never extracted from prose</span>
+      </div>
+      <div style="overflow-x: auto;">
+      <table class="metrics-table">
+        <thead>
+          <tr>
+            <th class="metric-col">Metric</th>
+            <th>Latest</th>
+            {% for yp in report.xbrl_deltas._year_pairs %}<th>{{ yp.split('-')[1] }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for tag in report.xbrl_deltas._tag_order %}
+          {% set td = report.xbrl_deltas[tag] %}
+          <tr>
+            <td>
+              <span class="metric-name">{{ report.xbrl_deltas._labels[tag] }}</span>
+              <span class="metric-tag">{{ tag }}</span>
+            </td>
+            <td class="metric-latest">{{ report.xbrl_deltas._latest[tag].value_str }}</td>
+            {% for yp in report.xbrl_deltas._year_pairs %}
+            <td class="pct-cell">{{ pct_chip(td.get(yp)) }}</td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {# ── Churn overview ── #}
+    {% set churn_sections = report.sections | selectattr('max_churn', 'greaterthan', 0) | list %}
+    {% if churn_sections %}
+    <section id="churn">
+      <div class="block-head">
+        <h2>Churn Overview</h2>
+        <span class="note">Fraction of each section's text that changed, year over year</span>
+      </div>
+      <div style="overflow-x: auto;">
+      <table class="churn-table">
+        <thead>
+          <tr>
+            <th class="sec">Section</th>
+            {% for yp in report._year_pairs %}<th>{{ yp[1] }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for section in churn_sections | sort(attribute='max_churn', reverse=true) %}
+          <tr>
+            <td class="sec"><a href="#{{ section.anchor }}">{{ section.section_name }}</a></td>
+            {% for yp in report._year_pairs %}
+            {% set score = section.churn_scores.get(yp[0] ~ '-' ~ yp[1]) %}
+            <td class="heat-cell">
+              {% if score is not none %}
+              <span class="heat {% if score == 0 %}zero{% endif %}" style="background: rgba(0,217,146,{{ '%.2f'|format(score * 0.55) }});">{{ '%.2f'|format(score) }}</span>
+              {% else %}<span class="heat zero">—</span>{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {# ── Per-section changes ── #}
+    {% for section in report.sections if section.has_content %}
+    <section id="{{ section.anchor }}" class="section-block">
+      <div class="sec-head">
+        <h3 class="sec-title">{{ section.section_name }}</h3>
+        <div class="sec-stats">
+          {% if section.n_material %}<span class="count-pill mat">{{ section.n_material }} material</span>{% endif %}
+          {% if section.n_notable %}<span class="count-pill">{{ section.n_notable }} notable</span>{% endif %}
+          <div class="sec-churn">
+            <div class="churn-bar-bg"><div class="churn-bar" style="width: {{ (section.max_churn * 100)|round|int }}%;"></div></div>
+            {{ '%.2f'|format(section.max_churn) }}
+          </div>
+        </div>
+      </div>
+
+      {% set material_changes = section.changes | selectattr('materiality', 'equalto', 'material') | list %}
+      {% set notable_changes = section.changes | selectattr('materiality', 'equalto', 'notable') | list %}
+      {% set boilerplate_changes = section.changes | selectattr('materiality', 'equalto', 'boilerplate') | list %}
+
+      {% if material_changes %}
+      <div class="mat-label material">Material Changes</div>
+      <div class="change-stack">
+        {% for ch in material_changes %}{{ change_card(ch) }}{% endfor %}
+      </div>
+      {% endif %}
+
+      {% if notable_changes %}
+      <div class="mat-label notable">Notable Changes</div>
+      <div class="change-stack">
+        {% for ch in notable_changes %}{{ change_card(ch) }}{% endfor %}
+      </div>
+      {% endif %}
+
+      {% if not material_changes and not notable_changes and not section.trend_narrative %}
+      <p class="empty-note">Only boilerplate churn in this section — no material or notable changes.</p>
+      {% endif %}
+
+      {% if boilerplate_changes %}
+      <details class="boi-details">
+        <summary>{{ boilerplate_changes|length }} boilerplate change{{ 's' if boilerplate_changes|length != 1 }} suppressed</summary>
+        <div class="change-stack">
+          {% for ch in boilerplate_changes %}{{ change_card(ch) }}{% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      {% if section.trend_narrative %}
+      <div class="trend-callout">
+        <div class="te">Five-year trend</div>
+        <p>{{ section.trend_narrative }}</p>
+      </div>
+      {% endif %}
+    </section>
+    {% endfor %}
+
+  </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var progress = document.getElementById('progress');
+  var items = Array.prototype.slice.call(document.querySelectorAll('#toc-sections .toc-item'));
+  var targets = items.map(function (a) { return document.getElementById(a.getAttribute('data-target')); });
+
+  function onScroll() {
+    var h = document.documentElement;
+    var scrolled = h.scrollTop / (h.scrollHeight - h.clientHeight || 1);
+    if (progress) progress.style.width = (scrolled * 100) + '%';
+
+    var idx = -1, mid = window.innerHeight * 0.35;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i] && targets[i].getBoundingClientRect().top <= mid) idx = i;
+    }
+    items.forEach(function (a, i) { a.classList.toggle('active', i === idx); });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+{% endblock %}

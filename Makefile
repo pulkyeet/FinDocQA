@@ -34,3 +34,6 @@ delta-no-llm:
 
 web:
 	cd src && uvicorn web.app:app --reload --port 8000
+
+rerender:
+	cd src && $(PY) rerender.py $(TICKER)

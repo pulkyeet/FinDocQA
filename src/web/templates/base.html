@@ -6,16 +6,18 @@
   <title>{% block title %}FinDocQA Delta{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/tokens.css">
   <style>
-    .nav-bar .nav-brand { font-size: var(--text-body-md); font-weight: 600; color: var(--color-primary); text-decoration: none; }
+    .nav-bar .nav-brand { display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
+    .nav-bar .nav-brand .b1 { font-size: var(--text-body-md); font-weight: 600; color: var(--color-primary); }
+    .nav-bar .nav-brand .b2 { font-size: var(--text-body-sm); font-weight: 500; color: var(--color-mute); }
     .nav-bar .nav-right { margin-left: auto; display: flex; gap: var(--space-lg); align-items: center; }
   </style>
   {% block head %}{% endblock %}
 </head>
 <body>
   <nav class="nav-bar">
-    <a href="/" class="nav-brand">FinDocQA Delta</a>
-    <a href="/" class="nav-link">Home</a>
+    <a href="/" class="nav-brand"><span class="b1">FinDocQA</span><span class="b2">/ Delta</span></a>
     <div class="nav-right">
+      <a href="/" class="nav-link">All reports</a>
       {% block nav_extra %}{% endblock %}
     </div>
   </nav>
@@ -24,7 +26,9 @@
 
   <footer class="footer">
     FinDocQA Delta — Filing Change Intelligence Engine<br>
-    <span class="caption">All claims trace to deterministic diff records.</span>
+    <span class="caption">Detection is deterministic. Interpretation is generative. Every claim traces to a diff record.</span>
   </footer>
+
+  {% block scripts %}{% endblock %}
 </body>
 </html>

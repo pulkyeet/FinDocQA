@@ -44,6 +44,57 @@ SECTION_NAMES = {
     "notes_to_financials": "Notes to Financials",
 }
 
+# Human-readable labels for the XBRL concept tags surfaced in the report.
+XBRL_LABELS = {
+    "Revenues": "Revenue",
+    "RevenueFromContractWithCustomerExcludingAssessedTax": "Revenue",
+    "ResearchAndDevelopmentExpense": "R&D Expense",
+    "CostOfGoodsAndServicesSold": "Cost of Revenue",
+    "GrossProfit": "Gross Profit",
+    "OperatingIncomeLoss": "Operating Income",
+    "NetIncomeLoss": "Net Income",
+    "IncomeLossFromContinuingOperationsBeforeIncomeTaxes": "Pre-Tax Income",
+    "IncomeTaxExpenseBenefit": "Income Tax",
+    "SellingGeneralAndAdministrativeExpense": "SG&A",
+    "EarningsPerShareBasic": "EPS (Basic)",
+    "EarningsPerShareDiluted": "EPS (Diluted)",
+    "NetCashProvidedByUsedInOperatingActivities": "Operating Cash Flow",
+    "NetCashProvidedByUsedInInvestingActivities": "Investing Cash Flow",
+    "NetCashProvidedByUsedInFinancingActivities": "Financing Cash Flow",
+    "Assets": "Total Assets",
+    "Liabilities": "Total Liabilities",
+    "StockholdersEquity": "Stockholders' Equity",
+    "LongTermDebtNoncurrent": "Long-Term Debt",
+    "CashAndCashEquivalentsAtCarryingValue": "Cash & Equivalents",
+    "AccountsReceivableNet": "Accounts Receivable",
+    "InventoryNet": "Inventory",
+    "PropertyPlantAndEquipmentNet": "Property & Equipment",
+}
+
+# EPS-style tags are per-share dollars, not aggregate — format them plainly.
+_PER_SHARE_TAGS = {"EarningsPerShareBasic", "EarningsPerShareDiluted"}
+
+
+def _fmt_money(v, tag=None) -> str:
+    """Format a financial value compactly ($391.0B, $1.2M, -$4.3B, $6.13)."""
+    if v is None:
+        return "—"
+    v = float(v)
+    if tag in _PER_SHARE_TAGS:
+        return f"${v:,.2f}"
+    a = abs(v)
+    sign = "-" if v < 0 else ""
+    if a >= 1e12:
+        return f"{sign}${a / 1e12:.2f}T"
+    if a >= 1e9:
+        return f"{sign}${a / 1e9:.1f}B"
+    if a >= 1e6:
+        return f"{sign}${a / 1e6:.1f}M"
+    if a >= 1e3:
+        return f"{sign}${a / 1e3:.0f}K"
+    return f"{sign}${a:,.0f}"
+
+
 _TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "templates")
 
 
@@ -116,6 +167,14 @@ def build_report_data(ticker, records_by_year, interpretations, trends,
         if not has_changes and anchor not in all_anchors:
             continue
 
+        n_material = sum(1 for ir in section_interps if ir.get("materiality") == "material")
+        n_notable = sum(1 for ir in section_interps if ir.get("materiality") == "notable")
+        n_boilerplate = sum(1 for ir in section_interps if ir.get("materiality") == "boilerplate")
+        n_guard = sum(1 for ir in section_interps if ir.get("numeric_guard"))
+        churn_vals = [v for v in churn_scores.values() if v is not None]
+        latest_churn = churn_scores.get(section_year_pairs[-1]) if section_year_pairs else None
+        trend = trends.get(anchor, "")
+
         sections.append({
             "ticker": ticker,
             "anchor": anchor,
@@ -123,10 +182,28 @@ def build_report_data(ticker, records_by_year, interpretations, trends,
             "year_pairs": section_year_pairs,
             "churn_scores": churn_scores,
             "changes": section_interps,
-            "trend_narrative": trends.get(anchor, ""),
+            "trend_narrative": trend,
+            "n_material": n_material,
+            "n_notable": n_notable,
+            "n_boilerplate": n_boilerplate,
+            "n_guard": n_guard,
+            "n_surfaced": n_material + n_notable,
+            "latest_churn": latest_churn,
+            "max_churn": max(churn_vals) if churn_vals else 0.0,
+            "has_content": (n_material + n_notable + n_boilerplate) > 0 or bool(trend),
         })
 
     xbrl_report = _build_xbrl_report(xbrl_deltas, year_pairs)
+
+    summary = {
+        "material": sum(s["n_material"] for s in sections),
+        "notable": sum(s["n_notable"] for s in sections),
+        "boilerplate": sum(s["n_boilerplate"] for s in sections),
+        "guard": sum(s["n_guard"] for s in sections),
+        "surfaced": sum(s["n_surfaced"] for s in sections),
+        "sections_total": len(sections),
+        "sections_with_content": sum(1 for s in sections if s["has_content"]),
+    }
 
     return {
         "ticker": ticker,
@@ -134,6 +211,7 @@ def build_report_data(ticker, records_by_year, interpretations, trends,
         "year_range": year_range,
         "_year_pairs": year_pairs,
         "sections": sections,
+        "summary": summary,
         "xbrl_deltas": xbrl_report,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
@@ -167,6 +245,19 @@ def _build_xbrl_report(xbrl_deltas, year_pairs):
 
     for tag, yp_deltas in xbrl_deltas.items():
         report[tag] = yp_deltas
+
+    # Humanized labels + the most-recent absolute value per tag (for display).
+    report["_labels"] = {tag: XBRL_LABELS.get(tag, tag) for tag in ordered}
+    latest = {}
+    for tag in ordered:
+        yp_deltas = xbrl_deltas.get(tag, {})
+        val, yp_used = None, None
+        for yp in year_pairs_str:  # ascending — last hit is most recent
+            d = yp_deltas.get(yp)
+            if d and d.get("new") is not None:
+                val, yp_used = d["new"], yp
+        latest[tag] = {"value_str": _fmt_money(val, tag), "yp": yp_used}
+    report["_latest"] = latest
 
     return report
 
