@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Not Found — FinDocQA Delta{% endblock %}
+{% block head %}
+<style>
+  .not-found-section {
+    padding: var(--space-6xl) var(--space-3xl);
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .not-found-section h1 {
+    color: var(--color-ink-strong);
+    font-size: var(--text-display-lg);
+    font-weight: 400;
+    letter-spacing: -0.9px;
+    margin-bottom: var(--space-lg);
+  }
+  .not-found-section p {
+    color: var(--color-body);
+    font-size: var(--text-body-md);
+    line-height: 26px;
+    margin-bottom: var(--space-2xl);
+  }
+  .code-chip-lg {
+    font-family: var(--font-mono);
+    font-size: var(--text-body-lg);
+    color: var(--color-primary);
+    background: var(--color-canvas-soft);
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-sm);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="not-found-section">
+  <h1>
+    {% if reason == "unknown_ticker" %}
+    Unknown ticker
+    {% else %}
+    Report not yet generated
+    {% endif %}
+  </h1>
+
+  {% if reason == "unknown_ticker" %}
+  <p>
+    <span class="code-chip-lg">{{ ticker }}</span> is not in our corpus.
+    Delta currently supports the Magnificent 7.
+  </p>
+  {% else %}
+  <p>
+    A change report for <span class="code-chip-lg">{{ ticker }}</span>
+    isn't published yet. Reports are pre-built for the Magnificent 7 —
+    pick one below.
+  </p>
+  {% endif %}
+
+  <p style="margin-top: var(--space-3xl);">
+    <a href="/" class="button-outline-on-dark">Back to Home</a>
+  </p>
+</div>
+{% endblock %}

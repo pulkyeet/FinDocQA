@@ -1,0 +1,37 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Data (too large for deployment — pre-built reports only)
+src/data/raw/
+src/data/chunks/
+src/data/chroma/
+src/data/eval/
+src/data/diffs/
+
+# Keep pre-built reports for serving
+!src/data/reports/
+
+# Dev-only requirements (torch etc.) — the image installs requirements-web.txt
+requirements.txt
+
+# IDE
+.vscode/
+.idea/
+.playwright-mcp/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

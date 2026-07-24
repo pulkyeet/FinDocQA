@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}FinDocQA Delta — Filing Change Intelligence{% endblock %}
+{% block head %}
+<style>
+  .hero {
+    padding: var(--space-5xl) var(--space-3xl);
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .hero .eyebrow {
+    color: var(--color-mute);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2.52px;
+    text-transform: uppercase;
+    margin-bottom: var(--space-xl);
+  }
+  .hero h1 {
+    color: var(--color-ink-strong);
+    font-size: var(--text-display-xl);
+    font-weight: 400;
+    line-height: 1.0;
+    letter-spacing: -0.65px;
+    margin-bottom: var(--space-xl);
+  }
+  .hero p {
+    color: var(--color-body);
+    font-size: var(--text-body-lg);
+    line-height: 28px;
+    max-width: 600px;
+    margin: 0 auto var(--space-2xl);
+  }
+
+  .input-section {
+    text-align: center;
+    padding: var(--space-3xl) var(--space-3xl) var(--space-5xl);
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .input-section h2 {
+    color: var(--color-ink-strong);
+    font-size: var(--text-display-sm);
+    font-weight: 600;
+    margin-bottom: var(--space-lg);
+  }
+  .input-form {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: var(--space-lg);
+  }
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    text-align: left;
+  }
+  .input-group label {
+    color: var(--color-mute);
+    font-size: var(--text-caption);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .input-group input, .input-group select {
+    background: var(--color-canvas-soft);
+    color: var(--color-ink);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-sm);
+    padding: var(--space-md) var(--space-lg);
+    font-family: var(--font-sans);
+    font-size: var(--text-body-md);
+    outline: none;
+  }
+  .input-group input { font-family: var(--font-mono); width: 140px; text-transform: uppercase; }
+  .input-group select { cursor: pointer; }
+  .input-group input:focus, .input-group select:focus {
+    border-color: var(--color-primary);
+  }
+
+  .available-tickers {
+    color: var(--color-mute);
+    font-size: var(--text-body-sm);
+    margin-top: var(--space-lg);
+  }
+  .available-tickers .ticker-link {
+    font-family: var(--font-mono);
+    color: var(--color-primary-soft);
+    text-decoration: none;
+  }
+  .available-tickers .ticker-link:hover { color: var(--color-primary); }
+  .available-tickers .ticker-link.available { font-weight: 600; }
+
+  .how-section {
+    padding: var(--space-5xl) var(--space-3xl);
+    text-align: center;
+  }
+  .how-section h2 {
+    color: var(--color-ink-strong);
+    font-size: var(--text-display-lg);
+    font-weight: 400;
+    letter-spacing: -0.9px;
+    margin-bottom: var(--space-4xl);
+  }
+  .how-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-xl);
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .how-card {
+    background: var(--color-canvas);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-md);
+    padding: var(--space-2xl);
+    text-align: left;
+  }
+  .how-card .step-num {
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+    color: var(--color-primary);
+    display: block;
+    margin-bottom: var(--space-md);
+  }
+  .how-card h3 {
+    color: var(--color-ink-strong);
+    font-size: var(--text-display-sm);
+    font-weight: 600;
+    margin-bottom: var(--space-sm);
+  }
+  .how-card p {
+    color: var(--color-body);
+    font-size: var(--text-body-sm);
+    line-height: 20px;
+  }
+
+  .why-section {
+    padding: var(--space-5xl) var(--space-3xl);
+    text-align: center;
+  }
+  .why-section h2 {
+    color: var(--color-ink-strong);
+    font-size: var(--text-display-lg);
+    font-weight: 400;
+    letter-spacing: -0.9px;
+    margin-bottom: var(--space-xl);
+  }
+  .why-section p {
+    color: var(--color-body);
+    font-size: var(--text-body-md);
+    line-height: 26px;
+    max-width: 650px;
+    margin: 0 auto;
+  }
+  .why-section .quote-block-callout {
+    color: var(--color-mute);
+    font-size: var(--text-caption);
+    margin-top: var(--space-2xl);
+    font-style: italic;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="hero">
+  <div class="eyebrow">Filing Change Intelligence</div>
+  <h1>Understand what changed between 10-K filings.</h1>
+  <p>
+    Delta analyzes five years of SEC filings, surfaces material changes,
+    and explains why they matter — with side-by-side quotes from both years.
+  </p>
+  <span class="code-inline-chip" style="font-size: var(--text-code);">$ python delta.py AAPL --years 5</span>
+</div>
+
+<div class="green-divider-band"></div>
+
+<div class="input-section">
+  <h2>Analyze a ticker</h2>
+  <form class="input-form" onsubmit="window.location.href='/report/' + document.getElementById('ticker-input').value.toUpperCase(); return false;">
+    <div class="input-group">
+      <label for="ticker-input">Ticker</label>
+      <input id="ticker-input" type="text" placeholder="AAPL" maxlength="5" autocomplete="off" required>
+    </div>
+    <button type="submit" class="button-primary">View Report</button>
+  </form>
+  <div class="available-tickers">
+    Available:
+    {% for t in tickers %}
+    <a href="/report/{{ t }}" class="ticker-link{% if t in available %} available{% endif %}">{{ t }}</a>{% if not loop.last %} · {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<div class="green-divider-band"></div>
+
+<div class="how-section">
+  <h2>How it works</h2>
+  <div class="how-grid">
+    <div class="how-card">
+      <span class="step-num">01</span>
+      <h3>Deterministic diff</h3>
+      <p>
+        Sections are aligned by anchor equality; paragraphs matched via embedding
+        similarity. Every change is classified (unchanged / minor / major / added / removed)
+        before the LLM ever sees it.
+      </p>
+    </div>
+    <div class="how-card">
+      <span class="step-num">02</span>
+      <h3>LLM interpretation</h3>
+      <p>
+        Only changed passages reach the model. It classifies each change
+        (expanded, softened, reworded), assigns materiality, and writes a summary
+        backed by verbatim quotes from both filings.
+      </p>
+    </div>
+    <div class="how-card">
+      <span class="step-num">03</span>
+      <h3>XBRL numeric context</h3>
+      <p>
+        Revenue, R&amp;D, net income, and other key metrics come from structured
+        XBRL data — never extracted from prose. The LLM sees the real numbers,
+        not hallucinated ones.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="green-divider-band"></div>
+
+<div class="why-section">
+  <h2>Why this matters</h2>
+  <p>
+    The <em>Lazy Prices</em> research (Cohen, Malloy, Nguyen) found that firms
+    whose filings change the most subsequently underperform the market.
+    Analysts don't read diffs. Delta does.
+  </p>
+  <p class="quote-block-callout">
+    The LLM never finds the diff. It only explains it. Detection is deterministic.
+    Interpretation is generative. Every claim traces to a diff record.
+  </p>
+</div>
+
+{% endblock %}

@@ -334,7 +334,15 @@ def synthesize_trend(interpretations: list[dict], anchor: str, year_pairs: list,
     if raw.startswith("[TIMEOUT]") or raw.startswith("[ERROR"):
         return ""
 
-    return raw.strip()
+    raw = raw.strip()
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and "narrative" in parsed:
+            raw = parsed["narrative"]
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return raw
 
 
 def synthesize_trends(ticker: str, interpretations: dict[str, list[dict]],
