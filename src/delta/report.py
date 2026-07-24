@@ -71,11 +71,18 @@ def build_report_data(ticker, records_by_year, interpretations, trends,
     sections = []
     all_anchors = set()
 
+    # Numeric guard lives on the diff record; join it onto interpretations by
+    # change_id so the report can show why an otherwise-identical paragraph was
+    # surfaced.
+    guard_by_change_id = {}
     for records in records_by_year.values():
         for r in records:
             a = r.get("anchor")
             if a:
                 all_anchors.add(a)
+            g = r.get("numeric_guard")
+            if g and r.get("change_id"):
+                guard_by_change_id[r["change_id"]] = g
 
     for anchor in interpretations:
         all_anchors.add(anchor)
@@ -98,6 +105,10 @@ def build_report_data(ticker, records_by_year, interpretations, trends,
             churn_scores[yp_key] = round(score, 4)
 
         section_interps = interpretations.get(anchor, [])
+        for ir in section_interps:
+            g = guard_by_change_id.get(ir.get("change_id"))
+            if g:
+                ir["numeric_guard"] = g
         has_changes = any(
             ir.get("materiality") != "boilerplate"
             for ir in section_interps

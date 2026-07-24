@@ -162,6 +162,8 @@ fetch (5 yrs) → parse + anchor → align sections (anchor equality)
 
 Output: a machine-readable **diff record** per change. Churn score per section per year = fraction of paragraphs classified as changed, weighted by length.
 
+**Numeric guard (augments Stage 5).** Cosine is blind to value-only changes — a paragraph whose only difference is a number (revenue $100M → $489M) scores ~0.99 and would be dropped as `unchanged`. A deterministic guard runs *only* on `unchanged` records and upgrades them: a **text guard** (`numeric_change_signal`, reusing `scoring.extract_numbers`) fires on a ≥20% relative move on any section (→ `modified_minor`, or `modified_major` for ≥100%), and **XBRL corroboration** (`xbrl_change_signal`) flags the most number-dense paragraph when an audited financial-section tag moved but the text guard stayed silent. It runs before Stage 6's join by computing XBRL deltas up front. Orthogonal to the thresholds above; every upgrade carries an auditable `numeric_guard` field, surfaced in the report as a `Δ NNN%` badge.
+
 **Stage 6: XBRL join.** For financially-loaded sections (Item 7, Item 8), YoY deltas for relevant XBRL tags are computed from companyfacts and attached as context. The LLM receives numbers from structured data, never extracts from prose.
 
 **Stage 7: LLM interpretation.** Changed records (only changed) go to the generation model with a strict JSON-output prompt. The model classifies each change (`added/removed/expanded/softened/strengthened/reworded`), assigns materiality (`boilerplate/notable/material`), writes a one-line summary, and for notable+ changes, one line on why it matters with verbatim quotes from each year.

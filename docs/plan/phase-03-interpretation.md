@@ -47,16 +47,19 @@ With OpenRouter + batched prompts + text truncation:
 - Lower on financial tables (item8_financials: 33/34) — the model struggles
   with verbatim quoting from dense table text
 
-## Known gap: numeric-blindness
+## Resolved gap: numeric-blindness ✅
 
-The cosine-similarity classifier is blind to numeric value changes. A paragraph
+The cosine-similarity classifier was blind to numeric value changes: a paragraph
 where only dollar amounts change (e.g. revenue $100M → $489M) scores ~0.99 and
-is classified `unchanged` — the LLM never sees it. XBRL deltas ARE computed but
-never used to override classifications.
+was classified `unchanged` — the LLM never saw it.
 
-**Planned fix (XBRL guard):** For financially-loaded sections, check XBRL
-deltas post-classification. If any mapped tag shows >20% YoY change, override
-`unchanged` records to `modified_minor`. See `tracker.md` "Future work".
+**Fixed (Hybrid text + XBRL numeric guard).** A deterministic guard in `diff.py`
+runs only on records cosine calls `unchanged`. A text guard
+(`numeric_change_signal`, reusing `scoring.extract_numbers`) upgrades any pair with
+a ≥20% relative numeric move; XBRL corroboration (`xbrl_change_signal`) surfaces the
+most number-dense paragraph when an audited financial-section tag moved but text
+didn't catch it. XBRL deltas are now computed before the diff loop and threaded
+through `diff_section_pair`/`diff_all_sections`. See `tracker.md` for details.
 
 ## Deliverables
 

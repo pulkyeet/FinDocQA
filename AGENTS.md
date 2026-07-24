@@ -113,9 +113,16 @@ FinDocQA/
 ```
 fetch (5 yrs) → parse + anchor → align sections (anchor equality)
     → align paragraphs (embeddings) → deterministic diff classification
+    → numeric guard (rescues value-only changes cosine calls "unchanged")
     → XBRL numeric deltas joined → LLM interpretation (changed pairs only)
     → trend synthesis → report render
 ```
+
+The **numeric guard** (`diff.py:numeric_change_signal` + `xbrl_change_signal`) fixes
+cosine's numeric-blindness: it runs only on `unchanged` records and upgrades any with
+a ≥20% numeric move (text) or a moved audited financial-section XBRL tag. XBRL deltas
+are computed before the diff loop; upgrades carry a `numeric_guard` field. See
+`working_knowledge.md`.
 
 **Core principle: the LLM never finds the diff; it only explains it.** Detection is
 deterministic Python. Interpretation is the only generative step, on small pre-verified

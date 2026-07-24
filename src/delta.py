@@ -115,6 +115,18 @@ def run_delta(ticker, years, no_llm=False):
         print(f"[error] need at least 2 years of chunks, got {len(available_fys)}")
         return
 
+    print(f"\n[stage 6] XBRL deltas (numeric guard + LLM context)...")
+    # Computed before diff so the numeric guard can corroborate audited metric
+    # moves during classification. Cheap + deterministic; also aids --no-llm.
+    try:
+        xbrl_data = load_companyfacts(ticker)
+        xbrl_deltas = compute_yoy_deltas(xbrl_data, XBRL_DELTA_TAGS, available_fys)
+        n_tags = len([k for k, v in xbrl_deltas.items() if v])
+        print(f"  {n_tags} tags with YoY deltas across {len(available_fys)} years")
+    except FileNotFoundError:
+        xbrl_deltas = {}
+        print(f"  [warn] companyfacts missing; numeric guard runs text-only")
+
     print(f"\n[stage 3-5] align + diff...")
     year_pairs = [(available_fys[i], available_fys[i + 1]) for i in range(len(available_fys) - 1)]
 
@@ -123,22 +135,17 @@ def run_delta(ticker, years, no_llm=False):
         print(f"\n  {y_old} -> {y_new}")
         all_records = diff_all_sections(
             chunks_by_year[y_old], chunks_by_year[y_new],
-            ticker, (y_old, y_new)
+            ticker, (y_old, y_new), xbrl_deltas=xbrl_deltas,
         )
         write_diff_records(all_records, ticker, y_old, y_new)
         records_by_year[(y_old, y_new)] = all_records
         n_changed = sum(1 for r in all_records if r["classification"] != "unchanged")
-        print(f"    {len(all_records)} diff records, {n_changed} changed")
+        n_guard = sum(1 for r in all_records if r.get("numeric_guard"))
+        print(f"    {len(all_records)} diff records, {n_changed} changed ({n_guard} via numeric guard)")
 
     print(churn_summary(ticker, records_by_year, SECTION_NAMES))
 
     if not no_llm:
-        print(f"\n[stage 6] XBRL deltas...")
-        xbrl_data = load_companyfacts(ticker)
-        xbrl_deltas = compute_yoy_deltas(xbrl_data, XBRL_DELTA_TAGS, available_fys)
-        n_tags = len([k for k, v in xbrl_deltas.items() if v])
-        print(f"  {n_tags} tags with YoY deltas across {len(available_fys)} years")
-
         print(f"\n[stage 7-8] LLM interpretation...")
         from delta.interpret import interpret_ticker, synthesize_trends
 

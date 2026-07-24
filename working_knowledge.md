@@ -159,11 +159,18 @@ Three fixes to `chunk.py` in phase 00:
 - **Model cache (v2):** `align.py` caches the SentenceTransformer model.
   Loading the model per section (20+ times per year pair) was the original
   cause of the pipeline appearing to hang at stage 3-5.
-- **Numeric-blindness gap (v2):** cosine-similarity classification is blind
-  to numeric value changes. A paragraph where only dollar amounts change
-  scores ~0.99 → classified `unchanged` → LLM never sees it. XBRL deltas ARE
-  computed but never used to override classifications. See tracker.md
-  "Future work" section for the planned XBRL guard fix.
+- **Numeric guard (v2) — fixes numeric-blindness:** cosine scores a paragraph
+  whose only change is a number ~0.99 → would be classified `unchanged` → LLM
+  never sees it. The guard in `diff.py` runs ONLY on `unchanged` records and
+  upgrades them: `numeric_change_signal` (text, reuses `scoring.extract_numbers`,
+  fires on ≥20% moves — `NUMERIC_GUARD_PCT`) and `xbrl_change_signal` (flags the
+  most number-dense paragraph when an audited financial-section tag moved but
+  text didn't). Upgraded records carry an auditable `numeric_guard` field and a
+  `Δ NNN%` badge in the report. XBRL deltas are computed BEFORE the diff loop
+  (`delta.py`) and passed through `diff_section_pair`/`diff_all_sections`, so the
+  guard also runs under `--no-llm`. Orthogonal to the tuned thresholds — no
+  re-tuning. Config: `NUMERIC_GUARD_PCT` / `NUMERIC_GUARD_MIN_VALUE` /
+  `NUMERIC_GUARD_MAJOR_PCT` / `FINANCIAL_ANCHORS`.
 - **Fiscal year matching in companyfacts:** AAPL's `Revenues` tag has data
   only through FY2018 (old revenue standard). Current tag is
   `RevenueFromContractWithCustomerExcludingAssessedTax` (ASC 606).

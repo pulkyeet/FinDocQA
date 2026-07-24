@@ -10,7 +10,12 @@ from config import (
     DIFF_THRESHOLD_UNCHANGED,
     DIFF_THRESHOLD_MINOR,
     DIFF_THRESHOLD_MAJOR,
+    NUMERIC_GUARD_PCT,
+    NUMERIC_GUARD_MIN_VALUE,
+    NUMERIC_GUARD_MAJOR_PCT,
+    FINANCIAL_ANCHORS,
 )
+from scoring import extract_numbers
 
 
 def classify_pair(similarity: float) -> str:
@@ -25,6 +30,88 @@ def classify_pair(similarity: float) -> str:
     if similarity >= DIFF_THRESHOLD_MAJOR:
         return "modified_major"
     return "modified_minor"
+
+
+# ---------------------------------------------------------------------------
+# Numeric guard (fixes numeric-blindness)
+#
+# Embedding cosine scores a paragraph whose only change is a number ~0.99, so
+# classify_pair calls it 'unchanged' and interpret.py never sees it. These
+# helpers run ONLY on records cosine calls 'unchanged' and upgrade them when a
+# material numeric move is detected — deterministic, model-free, auditable.
+# ---------------------------------------------------------------------------
+
+
+def _numbers_equal(old_nums: list[float], new_nums: list[float]) -> bool:
+    """True if the two number multisets are identical (robust to reordering)."""
+    return sorted(round(v, 2) for v in old_nums) == sorted(round(v, 2) for v in new_nums)
+
+
+def numeric_change_signal(old_text: str, new_text: str,
+                          threshold: float = NUMERIC_GUARD_PCT,
+                          min_value: float = NUMERIC_GUARD_MIN_VALUE) -> dict | None:
+    """Largest material relative numeric move between two near-identical texts.
+
+    Returns {'source':'text','old':x,'new':y,'pct':p} where p is a fraction
+    (0.20 == 20%), or None. Reuses scoring.extract_numbers (currency, scales,
+    paren-negatives, percentages, year-skipping). Intended for records cosine
+    already calls 'unchanged', so the two texts are near-identical in wording
+    and their numbers line up positionally.
+    """
+    old_nums = [v for v in extract_numbers(old_text) if abs(v) >= min_value]
+    new_nums = [v for v in extract_numbers(new_text) if abs(v) >= min_value]
+
+    if not old_nums or not new_nums:
+        return None
+    if _numbers_equal(old_nums, new_nums):
+        return None
+
+    # Positional pairing when counts match (near-identical text); otherwise
+    # greedy nearest-value pairing to estimate the move magnitude.
+    if len(old_nums) == len(new_nums):
+        pairs = list(zip(old_nums, new_nums))
+    else:
+        pairs = [(ov, min(new_nums, key=lambda x: abs(x - ov))) for ov in old_nums]
+
+    best = None
+    for ov, nv in pairs:
+        if ov == 0:
+            continue
+        pct = abs(nv - ov) / abs(ov)
+        if best is None or pct > best[2]:
+            best = (ov, nv, pct)
+
+    if best is None or best[2] < threshold:
+        return None
+    return {"source": "text", "old": best[0], "new": best[1], "pct": round(best[2], 4)}
+
+
+def xbrl_change_signal(anchor: str, year_pair: tuple[str, str], xbrl_deltas: dict,
+                       threshold: float = NUMERIC_GUARD_PCT) -> dict | None:
+    """Largest material XBRL tag move for a section's year-pair, or None.
+
+    pct is normalized to a fraction (compute_yoy_deltas stores pct_change as a
+    percent). Returns {'source':'xbrl','tag':t,'old':x,'new':y,'pct':p}.
+    """
+    from delta.xbrl_delta import deltas_for_section
+
+    sec = deltas_for_section(xbrl_deltas, anchor)
+    yp_key = f"{year_pair[0]}-{year_pair[1]}"
+    best = None
+    for tag, yp_deltas in sec.items():
+        d = yp_deltas.get(yp_key)
+        if not d or d.get("pct_change") is None:
+            continue
+        pct = abs(d["pct_change"]) / 100.0
+        if pct >= threshold and (best is None or pct > best["pct"]):
+            best = {"source": "xbrl", "tag": tag,
+                    "old": d.get("old"), "new": d.get("new"), "pct": round(pct, 4)}
+    return best
+
+
+def _guard_classification(pct: float) -> str:
+    """Map a guard's relative move to a change classification."""
+    return "modified_major" if pct >= NUMERIC_GUARD_MAJOR_PCT else "modified_minor"
 
 
 WORD_RE = re.compile(r"\w+|[^\w\s]+", re.UNICODE)
@@ -92,8 +179,12 @@ def compute_churn_score(paras: list[dict], classifications: list[str]) -> float:
 
 
 def diff_section_pair(alignment: dict, ticker: str, anchor: str,
-                      year_pair: tuple[str, str]) -> list[dict]:
+                      year_pair: tuple[str, str],
+                      xbrl_deltas: dict | None = None) -> list[dict]:
     """Stage 5 for one section pair: classify all matched pairs + structural changes.
+
+    Applies the numeric guard (text + XBRL corroboration) so paragraphs whose
+    only change is a number are not silently classified 'unchanged'.
 
     Returns list of diff records.
     """
@@ -107,13 +198,21 @@ def diff_section_pair(alignment: dict, ticker: str, anchor: str,
         oi = m["old_idx"]
         nj = m["new_idx"]
         sim = m["similarity"]
-        cls = classify_pair(sim)
         old_text = old_paras[oi] if oi < len(old_paras) else ""
         new_text = new_paras[nj] if nj < len(new_paras) else ""
+
+        cls = classify_pair(sim)
+        guard = None
+        if cls == "unchanged":
+            guard = numeric_change_signal(old_text, new_text)
+            if guard:
+                cls = _guard_classification(guard["pct"])
 
         record = make_diff_record(
             ticker, anchor, year_pair, cls, sim, oi, nj, old_text, new_text
         )
+        if guard:
+            record["numeric_guard"] = guard
         if cls != "unchanged":
             record["change_id"] = f"{ticker}-{anchor}-{year_pair[0]}-{year_pair[1]}-{seq:03d}"
             seq += 1
@@ -137,6 +236,26 @@ def diff_section_pair(alignment: dict, ticker: str, anchor: str,
         seq += 1
         records.append(record)
 
+    # XBRL corroboration: a financially-loaded section whose audited headline
+    # metric moved but where nothing surfaced (e.g. the number survived only in
+    # a mangled table cell). Flag the most number-dense unchanged paragraph so
+    # the metric reaches the LLM.
+    if xbrl_deltas and anchor in FINANCIAL_ANCHORS:
+        if not any(r["classification"] != "unchanged" for r in records):
+            sig = xbrl_change_signal(anchor, year_pair, xbrl_deltas)
+            if sig:
+                candidates = [r for r in records if r["classification"] == "unchanged"]
+                dense = max(
+                    candidates,
+                    key=lambda r: len(extract_numbers(r.get("new_text", ""))),
+                    default=None,
+                )
+                if dense is not None and extract_numbers(dense.get("new_text", "")):
+                    dense["classification"] = _guard_classification(sig["pct"])
+                    dense["numeric_guard"] = sig
+                    dense["change_id"] = f"{ticker}-{anchor}-{year_pair[0]}-{year_pair[1]}-{seq:03d}"
+                    seq += 1
+
     return records
 
 
@@ -150,7 +269,8 @@ def write_diff_records(records: list[dict], ticker: str, year_old: str, year_new
             f.write(json.dumps(rec) + "\n")
 
 
-def diff_all_sections(old_chunks, new_chunks, ticker, year_pair, model_key="bge-small") -> list[dict]:
+def diff_all_sections(old_chunks, new_chunks, ticker, year_pair, model_key="bge-small",
+                      xbrl_deltas: dict | None = None) -> list[dict]:
     """Run align + diff for every section pair, collect all records."""
     from delta.align import align_sections, align_section_pair
 
@@ -162,7 +282,7 @@ def diff_all_sections(old_chunks, new_chunks, ticker, year_pair, model_key="bge-
             continue
         print(f"    [{i+1}/{n_total}] {anchor}", end=" ", flush=True)
         alignment = align_section_pair(old_c, new_c, model_key)
-        records = diff_section_pair(alignment, ticker, anchor, year_pair)
+        records = diff_section_pair(alignment, ticker, anchor, year_pair, xbrl_deltas)
         n_changed = sum(1 for r in records if r["classification"] != "unchanged")
         print(f"-> {n_changed} changed")
         all_records.extend(records)

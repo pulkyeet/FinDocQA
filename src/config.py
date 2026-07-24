@@ -68,6 +68,15 @@ DIFF_THRESHOLD_UNCHANGED = 0.95
 DIFF_THRESHOLD_MINOR = 0.81
 DIFF_THRESHOLD_MAJOR = 0.60
 
+# Numeric guard (fixes numeric-blindness: cosine ~0.99 for pure-number changes).
+# Fires only on records cosine calls 'unchanged' — orthogonal to the tuned
+# thresholds above, so no re-tuning risk.
+NUMERIC_GUARD_PCT = 0.20        # relative YoY move that counts as material
+NUMERIC_GUARD_MIN_VALUE = 1.0   # ignore sub-unit numeric noise
+NUMERIC_GUARD_MAJOR_PCT = 1.00  # moves >= 100% upgrade to modified_major
+# Sections with audited XBRL backing (for XBRL corroboration guard)
+FINANCIAL_ANCHORS = ("income_statement", "balance_sheet", "cash_flow")
+
 # Paragraph alignment
 ALIGN_SIMILARITY_FLOOR = 0.50  # below this, paragraphs are unmatched
 

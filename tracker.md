@@ -76,23 +76,46 @@
 - [x] `Makefile` — added `delta`, `delta-batch`, `delta-no-llm`, `web` targets
 - [x] All 121 tests pass (93 pre-existing + 28 new)
 
-### Phase 05 — Web app + deploy  🔜
-- [ ] `web/app.py`, `routes.py` — FastAPI app
-- [ ] `index.html` — hero + ticker input (primary DESIGN.md surface)
-- [ ] Serve pre-built reports at `/report/{ticker}`
-- [ ] `requirements.txt` — add fastapi, uvicorn, jinja2
-- [ ] `fly.toml` — Fly.io deployment config
-- [ ] Tier 1: deploy to Fly.io (~$5/mo)
+### Phase 05 — Web app + deploy  ✅
+- [x] `web/app.py` — FastAPI app factory with static files mount and Jinja2Templates
+- [x] `web/routes.py` — `/` (hero index), `/report/{ticker}` (serve pre-built HTML or not-found page), `/api/trigger/{ticker}` (run delta pipeline async), `/api/status/{ticker}` (check report readiness)
+- [x] `web/templates/index.html` — DESIGN.md hero page: eyebrow, headline (weight 400), body copy, code chip, ticker input form, 3-up how-it-works cards, Lazy Prices context
+- [x] `web/templates/not_found.html` — graceful handling for unknown tickers (404) and not-yet-generated valid tickers (200)
+- [x] `report.html` — verified serving pre-built HTML works (MSFT report with 146 changes, XBRL metrics, churn bars, material/notable changes, side-by-side quotes, trend narratives, boilerplate `<details>` toggles, unvalidated flags)
+- [x] `interpret.py` — trend synthesis response cleaned (handles LLM JSON-wrapping with `_clean_trend_response`)
+- [x] `requirements.txt` — added fastapi, uvicorn, jinja2
+- [x] `Makefile` — `make web` target verified (`cd src && uvicorn web.app:app --reload --port 8000`)
+- [x] `fly.toml` — Fly.io deployment config (internal_port 8000, Paketo buildpacks, SJC region)
+- [x] `.dockerignore` — excludes raw/chunks/chroma/eval/diffs, keeps reports/
+- [x] All 121 tests pass
 
-### Future work — Numeric-blindness gap
-The embedding similarity classifier is blind to numeric value changes. A paragraph
+### Numeric-blindness gap — RESOLVED ✅
+The embedding similarity classifier was blind to numeric value changes: a paragraph
 where only dollar amounts change (e.g. revenue $100M → $489M) scores cosine ~0.99
-and is classified `unchanged` — the LLM never sees it.
+and was classified `unchanged` — the LLM never saw it.
 
-**Planned fix (Option A — XBRL guard):** For financially-loaded sections
-(`income_statement`, `balance_sheet`, `cash_flow`), after diff classification,
-check XBRL deltas. If any mapped tag shows >20% YoY change, override
-`unchanged` records to `modified_minor` so the LLM sees them.
+**Fix shipped (Hybrid text + XBRL guard, deterministic).** Runs only on records
+cosine calls `unchanged`, so it is orthogonal to the tuned thresholds (no
+re-tuning risk). Every upgrade stamps an auditable `numeric_guard` reason.
+- **Text guard (`diff.py:numeric_change_signal`):** reuses `scoring.extract_numbers`
+  to compare numbers on both sides of a matched pair; a relative move ≥ 20%
+  (`NUMERIC_GUARD_PCT`) upgrades `unchanged` → `modified_minor`, or
+  `modified_major` for moves ≥ 100% (`NUMERIC_GUARD_MAJOR_PCT`). Works on every
+  section (MD&A, risk factors, tables), paragraph-precise.
+- **XBRL corroboration (`diff.py:xbrl_change_signal`):** on financial sections
+  (`FINANCIAL_ANCHORS`), if an audited tag moved ≥ threshold but no paragraph got
+  text-flagged, the most number-dense unchanged paragraph is surfaced (catches
+  numbers that survive only in a mangled table cell).
+- **Wiring:** `diff_section_pair`/`diff_all_sections` take `xbrl_deltas`; XBRL
+  deltas are now computed *before* the diff loop in `delta.py` (also benefits
+  `--no-llm`). Report joins `numeric_guard` onto interpretations by `change_id`
+  and shows a `Δ NNN%` badge (`report.py` + `report.html`).
+- **Verification:** 9 new tests in `test_diff.py` (130 total pass). On
+  `MSFT --years 2 --no-llm`, the guard rescued **92** changes, **all** at cosine
+  ≥ 0.95 (100% invisible before) — e.g. a balance-sheet lease line `1197 → 2349`
+  at cosine 1.000.
+- **Config:** `NUMERIC_GUARD_PCT=0.20`, `NUMERIC_GUARD_MIN_VALUE=1.0`,
+  `NUMERIC_GUARD_MAJOR_PCT=1.00`, `FINANCIAL_ANCHORS` in `config.py`.
 
 ## Env & config tweaks (incidental)
 - [x] `.opencode/opencode.json` — model config

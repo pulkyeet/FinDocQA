@@ -221,6 +221,12 @@
     {% if ch.classification %}
     <span class="caption" style="color: var(--color-mute);">({{ ch.classification }})</span>
     {% endif %}
+    {% if ch.numeric_guard %}
+    <span class="caption" style="font-family: var(--font-mono); color: var(--color-primary); border: 1px solid var(--color-primary); border-radius: 999px; padding: 0 var(--space-xs);"
+          title="{% if ch.numeric_guard.source == 'xbrl' %}{{ ch.numeric_guard.tag }}: {% endif %}{{ ch.numeric_guard.old }} &rarr; {{ ch.numeric_guard.new }}">
+      &#916; {{ (ch.numeric_guard.pct * 100) | round(0) | int }}%{% if ch.numeric_guard.source == 'xbrl' %} &middot; XBRL{% endif %}
+    </span>
+    {% endif %}
   </div>
 
   <p class="body-md" style="margin-bottom: var(--space-sm);">{{ ch.summary }}</p>

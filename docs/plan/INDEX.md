@@ -6,8 +6,8 @@
 | 01 | Multi-year corpus | ✅ complete | 00 | — |
 | 02 | Diff engine (full) | ✅ complete | 01 | — |
 | 03 | XBRL + interpretation | ✅ complete | 02 | — |
-| 04 | Report render | pending | 03 | — |
-| 05 | Web app + deploy | pending | 04 | — |
+| 04 | Report render | ✅ complete | 03 | — |
+| 05 | Web app + deploy | ✅ complete | 04 | — |
 
 ## Dependency notes
 
@@ -29,15 +29,20 @@
 | Thresholds | expected to shift significantly | validated defaults (0.95/0.81/0.60) |
 | Chunker hardening | regex tweaks | keyword+table heading detection, anchor fallback, merge guard |
 
-## Known gap: numeric-blindness
+## Resolved gap: numeric-blindness ✅
 
-The cosine-similarity classifier is blind to numeric value changes. A paragraph
+The cosine-similarity classifier was blind to numeric value changes: a paragraph
 where only dollar amounts change (e.g. revenue $100M → $489M) scores ~0.99 and
-is classified unchanged — the LLM never sees it.
+was classified unchanged — the LLM never saw it.
 
-**Planned fix (XBRL guard):** For financially-loaded sections, check XBRL
-deltas post-classification. If any mapped tag shows >20% YoY change, override
-`unchanged` records to `modified_minor`.
+**Fixed (Hybrid text + XBRL numeric guard).** A deterministic guard runs only on
+records cosine calls `unchanged` and upgrades them when a material numeric move is
+detected: a text guard (`diff.py:numeric_change_signal`, reusing
+`scoring.extract_numbers`) catches ≥20% moves on any section, and XBRL
+corroboration (`xbrl_change_signal`) flags the most number-dense paragraph when an
+audited financial-section tag moved but text didn't surface it. Orthogonal to the
+tuned thresholds; every upgrade carries an auditable `numeric_guard` reason. See
+`tracker.md` for details and verification.
 
 ## What "done" looks like (end of phase 05)
 

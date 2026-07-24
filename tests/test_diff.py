@@ -6,7 +6,10 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from delta.diff import classify_pair, word_delta, compute_churn_score, make_diff_record
+from delta.diff import (
+    classify_pair, word_delta, compute_churn_score, make_diff_record,
+    numeric_change_signal, diff_section_pair,
+)
 
 
 class TestClassifyPair(unittest.TestCase):
@@ -94,6 +97,111 @@ class TestMakeDiffRecord(unittest.TestCase):
         self.assertEqual(rec["new_text"], "new text here")
         self.assertIn("word_delta", rec)
         self.assertIn("change_id", rec)
+
+
+class TestNumericChangeSignal(unittest.TestCase):
+    def test_material_move_fires(self):
+        sig = numeric_change_signal("Net sales were $100 million.",
+                                    "Net sales were $489 million.")
+        self.assertIsNotNone(sig)
+        self.assertEqual(sig["source"], "text")
+        self.assertGreater(sig["pct"], 1.0)  # 389% move
+
+    def test_identical_numbers_no_fire(self):
+        self.assertIsNone(
+            numeric_change_signal("Total was 100.", "Total was 100.")
+        )
+
+    def test_small_move_below_threshold(self):
+        # 100 -> 105 is a 5% move, below the 20% guard threshold
+        self.assertIsNone(
+            numeric_change_signal("Total was 100.", "Total was 105.")
+        )
+
+    def test_reordered_numbers_no_fire(self):
+        # Same multiset in a different order is not a change
+        self.assertIsNone(
+            numeric_change_signal("Values 100 and 500.", "Values 500 and 100.")
+        )
+
+    def test_year_tokens_ignored(self):
+        # Bare 4-digit years are skipped by extract_numbers -> no numeric signal
+        self.assertIsNone(
+            numeric_change_signal("In fiscal 2023 revenue grew.",
+                                  "In fiscal 2024 revenue grew.")
+        )
+
+
+def _matched_alignment(old_text, new_text, similarity, anchor):
+    return {
+        "matches": [{"old_idx": 0, "new_idx": 0, "similarity": similarity}],
+        "added": [],
+        "removed": [],
+        "old_paras": [old_text],
+        "new_paras": [new_text],
+        "anchor": anchor,
+    }
+
+
+class TestNumericGuardInDiff(unittest.TestCase):
+    def test_text_guard_upgrades_unchanged(self):
+        # Cosine says unchanged (0.99) but a number jumped 389%
+        alignment = _matched_alignment(
+            "Net sales were $100 million.", "Net sales were $489 million.",
+            0.99, "income_statement",
+        )
+        records = diff_section_pair(alignment, "AAPL", "income_statement",
+                                    ("FY2024", "FY2025"))
+        self.assertEqual(records[0]["classification"], "modified_major")
+        self.assertEqual(records[0]["numeric_guard"]["source"], "text")
+
+    def test_no_numeric_move_stays_unchanged(self):
+        alignment = _matched_alignment(
+            "Net sales were $100 million.", "Net sales were $100 million.",
+            0.99, "income_statement",
+        )
+        records = diff_section_pair(alignment, "AAPL", "income_statement",
+                                    ("FY2024", "FY2025"))
+        self.assertEqual(records[0]["classification"], "unchanged")
+        self.assertNotIn("numeric_guard", records[0])
+
+    def test_xbrl_corroboration_flags_dense_para(self):
+        # Numbers identical in text (text guard silent), but an audited XBRL
+        # tag moved >20% -> flag the most number-dense unchanged paragraph.
+        xbrl_deltas = {
+            "Revenues": {
+                "FY2024-FY2025": {
+                    "old": 100, "new": 489, "abs_change": 389, "pct_change": 389.0,
+                }
+            }
+        }
+        alignment = _matched_alignment(
+            "The table below shows 100 200 300.",
+            "The table below shows 100 200 300.",
+            0.99, "income_statement",
+        )
+        records = diff_section_pair(alignment, "AAPL", "income_statement",
+                                    ("FY2024", "FY2025"), xbrl_deltas)
+        self.assertEqual(records[0]["classification"], "modified_major")
+        self.assertEqual(records[0]["numeric_guard"]["source"], "xbrl")
+        self.assertEqual(records[0]["numeric_guard"]["tag"], "Revenues")
+
+    def test_xbrl_corroboration_skips_nonfinancial_anchor(self):
+        xbrl_deltas = {
+            "Revenues": {
+                "FY2024-FY2025": {
+                    "old": 100, "new": 489, "abs_change": 389, "pct_change": 389.0,
+                }
+            }
+        }
+        alignment = _matched_alignment(
+            "The table below shows 100 200 300.",
+            "The table below shows 100 200 300.",
+            0.99, "item1a_risk",
+        )
+        records = diff_section_pair(alignment, "AAPL", "item1a_risk",
+                                    ("FY2024", "FY2025"), xbrl_deltas)
+        self.assertEqual(records[0]["classification"], "unchanged")
 
 
 if __name__ == "__main__":
