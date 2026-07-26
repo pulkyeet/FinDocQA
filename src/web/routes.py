@@ -2,13 +2,14 @@
 
 Static deployment: reports are pre-built offline (`make delta-batch`) and served
 as static HTML. Live generation is intentionally disabled — the deploy image has
-no pipeline dependencies (see Dockerfile / requirements-web.txt).
+no pipeline dependencies (see Dockerfile / requirements-web.txt) — so there is no
+API surface here, only pages.
 """
 
 import os
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 
 from config import TICKERS, DELTA_YEARS_MAX, DELTA_REPORTS_DIR
 
@@ -66,38 +67,6 @@ def register_routes(app: FastAPI, templates, src_dir: str):
         return templates.TemplateResponse(request, "not_found.html", {
             "ticker": ticker,
             "reason": "not_generated",
-        })
-
-    @app.post("/api/trigger/{ticker}")
-    async def trigger(ticker: str):
-        # Live generation is disabled in the static deploy. Reports are built
-        # offline via `make delta-batch`; this endpoint only reports readiness.
-        ticker = ticker.upper()
-        if ticker not in TICKERS:
-            return JSONResponse({"error": f"Unknown ticker: {ticker}"}, status_code=400)
-
-        ready = os.path.isfile(os.path.join(_reports_dir(src_dir), f"{ticker}.html"))
-        return JSONResponse(
-            {
-                "status": "static",
-                "ticker": ticker,
-                "ready": ready,
-                "detail": "Reports are generated offline and served statically.",
-            },
-            status_code=200 if ready else 501,
-        )
-
-    @app.get("/api/status/{ticker}")
-    async def status(ticker: str):
-        ticker = ticker.upper()
-        if ticker not in TICKERS:
-            return JSONResponse({"error": f"Unknown ticker: {ticker}"}, status_code=400)
-
-        report_path = os.path.join(_reports_dir(src_dir), f"{ticker}.html")
-        return JSONResponse({
-            "ready": os.path.isfile(report_path),
-            "generating": False,
-            "ticker": ticker,
         })
 
     return app

@@ -16,7 +16,9 @@ _STATIC_DIR = os.path.join(_WEB_DIR, "static")
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Delta")
+    # Auto-generated API docs are disabled: this is a static report site with no
+    # public API, and Swagger UI would only advertise endpoints that don't exist.
+    app = FastAPI(title="Delta", docs_url=None, redoc_url=None, openapi_url=None)
 
     if os.path.isdir(_STATIC_DIR):
         app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
