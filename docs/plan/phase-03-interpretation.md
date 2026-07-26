@@ -65,7 +65,7 @@ runs only on records cosine calls `unchanged`. A text guard
 a ≥20% relative numeric move; XBRL corroboration (`xbrl_change_signal`) surfaces the
 most number-dense paragraph when an audited financial-section tag moved but text
 didn't catch it. XBRL deltas are now computed before the diff loop and threaded
-through `diff_section_pair`/`diff_all_sections`. See `tracker.md` for details.
+through `diff_section_pair`/`diff_all_sections`. See `../tracker.md` for details.
 
 ## Deliverables
 

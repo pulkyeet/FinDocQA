@@ -49,7 +49,9 @@
 - [x] Chunk size ≤ 2000 chars verified across all 30 files; XBRL noise eliminated
 
 ### Phase 02 — Diff engine (full)  ✅
-- [x] `align.py` — full greedy paragraph matching, Hungarian fallback added (not wired)
+- [x] `align.py` — full greedy paragraph matching (a Hungarian/`scipy` fallback was
+      added here but never wired in; removed as dead code during deploy cleanup —
+      greedy proved sufficient on the labeled sample)
 - [x] `diff.py` — classification, word deltas, churn score, `diff_all_sections`, `churn_summary`, `classification_counts`
 - [x] 48-pair labeled sample (`data/eval/diff_labels.jsonl` + `diff_labels.md`) across 5 sections × 2 year pairs
 - [x] `tune_thresholds.py` — grid search, held-out eval, sample generator

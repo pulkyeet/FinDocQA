@@ -1,7 +1,7 @@
 # Phase 05 — Web App + Deploy
 
 > **This is the original plan, retained as the execution record. Four things
-> changed in what shipped — see `DEPLOY.md` for the current procedure:**
+> changed in what shipped — see `../DEPLOY.md` for the current procedure:**
 >
 > 1. **Build:** `Dockerfile` + `requirements-web.txt`, not the Paketo buildpack in
 >    the `fly.toml` snippet below. No torch/chromadb in the image (~200MB).
@@ -27,7 +27,7 @@ Wrap the report in a FastAPI web app with two pages: a hero/query index page (se
 Read first:
 - `docs/plan/00-ARCHITECTURE.md` §3.10 (web app contracts), §4 (API routes), §5 (cross-cutting policies)
 - `DESIGN.md` (full design system — the hero page is the primary DESIGN.md surface)
-- `delta_master_blueprint.md` Part II web application section, deployment section
+- `../delta_master_blueprint.md` Part II web application section, deployment section
 - `docs/plan/phase-04-report-render.md` (you built the templates + CSS here)
 - `src/web/templates/base.html`, `report.html` (from phase 04)
 - `src/web/static/css/tokens.css` (from phase 04)

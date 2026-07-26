@@ -136,50 +136,6 @@ def match_paragraphs(
     return {"matches": matches, "added": added, "removed": removed}
 
 
-def match_paragraphs_hungarian(
-    old_paras: list[str],
-    new_paras: list[str],
-    old_embs: np.ndarray,
-    new_embs: np.ndarray,
-    similarity_floor: float = ALIGN_SIMILARITY_FLOOR,
-) -> dict:
-    """Fallback: Hungarian algorithm (global optimum) for paragraph matching.
-
-    Uses scipy.optimize.linear_sum_assignment on a cost matrix (1 - similarity).
-    NOT wired in — reserved for when the labeled sample shows greedy is insufficient.
-    """
-    from scipy.optimize import linear_sum_assignment
-
-    if len(old_embs) == 0 and len(new_embs) == 0:
-        return {"matches": [], "added": [], "removed": []}
-
-    if len(old_embs) == 0:
-        return {"matches": [], "added": list(range(len(new_paras))), "removed": []}
-
-    if len(new_embs) == 0:
-        return {"matches": [], "added": [], "removed": list(range(len(old_paras)))}
-
-    sim_matrix = np.dot(old_embs, new_embs.T)
-    cost_matrix = 1.0 - sim_matrix
-
-    old_idx, new_idx = linear_sum_assignment(cost_matrix)
-
-    matches = []
-    old_used = set()
-    new_used = set()
-    for oi, nj in zip(old_idx, new_idx):
-        sim = float(sim_matrix[oi, nj])
-        if sim >= similarity_floor:
-            matches.append({"old_idx": int(oi), "new_idx": int(nj), "similarity": sim})
-            old_used.add(int(oi))
-            new_used.add(int(nj))
-
-    added = [j for j in range(len(new_paras)) if j not in new_used]
-    removed = [i for i in range(len(old_paras)) if i not in old_used]
-
-    return {"matches": matches, "added": added, "removed": removed}
-
-
 def align_section_pair(
     old_chunks: list[dict],
     new_chunks: list[dict],

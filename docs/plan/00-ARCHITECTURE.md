@@ -1,6 +1,6 @@
 # 00-ARCHITECTURE.md — FinDocQA Delta v2
 
-**Read `delta_master_blueprint.md` first.** This doc is the build-ready spec: exact contracts, schemas, directory tree, cross-cutting policies. No prose where a signature will do.
+**Read `../delta_master_blueprint.md` first.** This doc is the build-ready spec: exact contracts, schemas, directory tree, cross-cutting policies. No prose where a signature will do.
 
 ---
 
@@ -8,13 +8,19 @@
 
 ```
 FinDocQA/
-├── delta_master_blueprint.md          # merged source of truth (v1 + v2)
-├── tracker.md                         # progress tracker
-├── working_knowledge.md               # session bootstrap
+├── README.md                          # v1 results narrative + project overview
 ├── DESIGN.md                          # UI design system (unchanged)
-├── AGENTS.md                          # agent notes (updated for v2)
-├── Makefile                           # extended with delta + web targets
-├── requirements.txt                   # extended: fastapi, uvicorn, jinja2
+├── AGENTS.md / CLAUDE.md              # agent notes (updated for v2)
+├── LICENSE                            # MIT
+├── Makefile                           # extended with delta + web + deploy targets
+├── requirements.txt                   # full dev/pipeline deps
+├── requirements-web.txt               # deployed runtime deps only (no torch)
+├── Dockerfile / fly.toml              # slim static deploy — see docs/DEPLOY.md
+├── docs/
+│   ├── delta_master_blueprint.md      # merged source of truth (v1 + v2)
+│   ├── DEPLOY.md                      # Fly.io deploy + cost invariant
+│   ├── tracker.md                     # progress tracker
+│   └── working_knowledge.md           # session bootstrap
 ├── docs/plan/
 │   ├── 00-ARCHITECTURE.md             # this file
 │   ├── INDEX.md                       # phase index
@@ -547,5 +553,5 @@ flowchart TD
     O --> P[data/reports/]
     O --> Q[CLI summary]
     P --> R[web/app.py: FastAPI serves pre-built report]
-    R --> S[Fly.io: baked into slim image, see DEPLOY.md]
+    R --> S[Fly.io: baked into slim image, see ../DEPLOY.md]
 ```

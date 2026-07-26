@@ -53,25 +53,6 @@ NUM_RE = re.compile(
 YEAR_RE = re.compile(r"^(19|20)\d{2}$")
 
 
-def _parse_number_body(body: str) -> Optional[float]:
-    """Parse the inner number string. Returns None on failure."""
-    s = body.strip()
-    is_paren = s.startswith("(") and s.endswith(")")
-    inner = s.strip("()").strip()
-    inner = inner.lstrip("-").strip()
-    inner = inner.replace(",", "")
-    try:
-        v = float(inner)
-    except ValueError:
-        return None
-    if is_paren or body.strip().startswith("("):
-        v = -abs(v)
-    # Leading minus (outside parens)
-    if body.strip().startswith("-") and not is_paren:
-        v = -abs(v)
-    return v
-
-
 def extract_numbers(text: str, cited_metas: Optional[list] = None) -> list:
     """Extract candidate numeric values (in BASE units) from answer text.
 

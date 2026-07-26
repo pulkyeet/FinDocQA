@@ -1,10 +1,10 @@
 # CRITICAL RULES
 
-> **READ `working_knowledge.md` FIRST.** It has operational habits
+> **READ `docs/working_knowledge.md` FIRST.** It has operational habits
 > (`opencode serve` shortcut, data/gitignore layout, recurring gotchas
 > like Chroma batch limit, E5 prefixes, v2 file naming, chunking fixes,
 > interpretation quote validation). This file is project config;
-> `working_knowledge.md` is the session bootstrap.
+> `docs/working_knowledge.md` is the session bootstrap.
 
 # FinDocQA agent notes
 
@@ -14,7 +14,7 @@ FinDocQA is now a two-part system:
 1. **v1 (COMPLETE): RAG eval harness** — QA over SEC 10-K filings with deterministic eval suite. The credibility floor.
 2. **v2 (IN PROGRESS): Delta** — filing change-intelligence engine. Five-year YoY diff with LLM interpretation. The product.
 
-**`delta_master_blueprint.md` is the design source of truth** (merged from the old v1 plan + Delta upgrade report). If something here conflicts with the blueprint, the blueprint wins. For build-ready specs, read `docs/plan/00-ARCHITECTURE.md` and the phase files in `docs/plan/`.
+**`docs/delta_master_blueprint.md` is the design source of truth** (merged from the old v1 plan + Delta upgrade report). If something here conflicts with the blueprint, the blueprint wins. For build-ready specs, read `docs/plan/00-ARCHITECTURE.md` and the phase files in `docs/plan/`.
 
 ## Run it
 
@@ -38,7 +38,7 @@ make delta-batch    # all 7 tickers → data/reports/*.html
 make web            # FastAPI server at localhost:8000
 make rerender-all   # rebuild HTML from persisted output — NO LLM calls (template/CSS work)
 make narrate-all    # recompose chapter prose (~6 LLM calls/ticker), then render (prompt work)
-make deploy         # rerender-all, then flyctl deploy (see DEPLOY.md)
+make deploy         # rerender-all, then flyctl deploy (see docs/DEPLOY.md)
 ```
 
 **Never re-run the full pipeline to check a template change** — `make rerender`
@@ -73,14 +73,19 @@ python-dotenv, duckduckgo-search, streamlit, pandas, torch; v2 adds: fastapi, uv
 
 ```
 FinDocQA/
-├── delta_master_blueprint.md    # design source of truth (v1 + v2 merged) — read this first
-├── working_knowledge.md         # session bootstrap — read this first too
 ├── DESIGN.md                    # UI design system (Voltagent-inspired, dark canvas)
-├── docs/plan/                   # build-ready architecture + phase files
-│   ├── 00-ARCHITECTURE.md       # contracts, schemas, directory tree, decision log
-│   ├── INDEX.md                 # phase index + dependencies
-│   └── phase-00..05-*.md        # one file per execution phase
-├── Makefile                     # fetch / chunk / embed / eval / delta / web / test
+├── docs/
+│   ├── delta_master_blueprint.md  # design source of truth (v1+v2) — read this first
+│   ├── working_knowledge.md       # session bootstrap — read this first too
+│   ├── DEPLOY.md                  # Fly.io static deploy + cost invariant
+│   ├── tracker.md                 # progress tracker
+│   └── plan/                      # build-ready architecture + phase files
+│       ├── 00-ARCHITECTURE.md     # contracts, schemas, directory tree, decision log
+│       ├── INDEX.md               # phase index + dependencies
+│       └── phase-00..05-*.md      # one file per execution phase
+├── Dockerfile / fly.toml        # slim static deploy (no torch) — see docs/DEPLOY.md
+├── requirements-web.txt         # deployed runtime deps only
+├── Makefile                     # fetch / chunk / embed / eval / delta / web / deploy / test
 ├── src/
 │   ├── config.py               # paths, tickers, v2 constants (thresholds, chunk sizes, DELTA_* dirs)
 │   ├── fetch.py                # SEC throttled fetcher; v2: --years N, fiscal_year_label()
@@ -94,25 +99,30 @@ FinDocQA/
 │   ├── web_search.py           # DuckDuckGo fallback (v1 W3)
 │   ├── dashboard.py            # v1 Streamlit 4-tab comparison
 │   ├── delta.py                # v2 CLI entrypoint: python delta.py TICKER --years 5
+│   ├── rerender.py             # rebuild report HTML from persisted output (no LLM)
 │   ├── delta/                  # v2 Delta pipeline package
 │   │   ├── align.py            # stage 3-4: section + paragraph alignment
-│   │   ├── diff.py             # stage 5: classification, word deltas, churn score
-│   │   ├── xbrl_delta.py       # stage 6: YoY XBRL deltas from companyfacts
-│   │   ├── interpret.py        # stage 7-8: LLM calls, JSON validation, quote-verbatim check
-│   │   ├── report.py           # stage 9: HTML + CLI rendering (Jinja2)
-│   │   └── prompts.py          # interpretation + synthesis prompt templates
+│   │   ├── diff.py             # stage 5: classification, word deltas, churn, numeric guard
+│   │   ├── xbrl_delta.py       # stage 6: YoY deltas + metric series from companyfacts
+│   │   ├── interpret.py        # stage 7: LLM calls, JSON validation, quote-verbatim check
+│   │   ├── narrate.py          # stage 8: chapter prose + citation resolution
+│   │   ├── report.py           # stage 9: chapter assembly, HTML + CLI rendering (Jinja2)
+│   │   └── prompts.py          # SYSTEM_JSON (stage 7) + SYSTEM_PROSE (stage 8) templates
 │   ├── web/                    # v2 FastAPI web app
 │   │   ├── app.py              # FastAPI app factory
-│   │   ├── routes.py           # /, /report/{ticker}, /api/trigger/{ticker}
-│   │   ├── templates/          # base.html, index.html (hero), report.html
-│   │   └── static/css/tokens.css  # DESIGN.md → CSS custom properties
+│   │   ├── routes.py           # /, /report/{ticker}, /api/trigger|status/{ticker}
+│   │   ├── templates/          # base, index (hero), report, report_index, not_found
+│   │   └── static/             # css/tokens.css (DESIGN.md → CSS vars) + img/delta.png
 │   └── eval/                   # v1 eval set builders (unchanged)
-└── tests/
+└── tests/                      # 9 modules, 180 tests
     ├── test_anchors.py         # v1
     ├── test_scoring.py         # v1
     ├── test_align.py           # v2
     ├── test_diff.py            # v2
-    └── test_xbrl_delta.py      # v2
+    ├── test_xbrl_delta.py      # v2
+    ├── test_interpret.py       # v2
+    ├── test_narrate.py         # v2
+    └── test_report.py          # v2
 ```
 
 ## v2 Delta pipeline (9 stages)
@@ -137,7 +147,7 @@ The **numeric guard** (`diff.py:numeric_change_signal` + `xbrl_change_signal`) f
 cosine's numeric-blindness: it runs only on `unchanged` records and upgrades any with
 a ≥20% numeric move (text) or a moved audited financial-section XBRL tag. XBRL deltas
 are computed before the diff loop; upgrades carry a `numeric_guard` field. See
-`working_knowledge.md`.
+`docs/working_knowledge.md`.
 
 **Core principle: the LLM never finds the diff; it only explains it.** Detection is
 deterministic Python. Interpretation is the only generative step, on small pre-verified
@@ -163,7 +173,7 @@ change sets. Every LLM claim traces to a diff record with verbatim quotes from b
 
 ## Deploy (Fly.io, static) — `make deploy`
 
-Full procedure in `DEPLOY.md`; gotchas in `working_knowledge.md`. The essentials:
+Full procedure in `docs/DEPLOY.md`; gotchas in `docs/working_knowledge.md`. The essentials:
 
 Reports are built **offline** and baked into the image. The deployed app serves
 pre-built HTML and has **no live generation path** — `/api/trigger` returns `501`,
@@ -178,7 +188,7 @@ Two things to not break:
    python-dotenv. If the `web.app` → `config` import chain reaches torch or
    chromadb, the container dies on boot while `make web` stays green, because
    `make web` runs against the full dev env. Verify with a throwaway venv built
-   from `requirements-web.txt` alone (see `DEPLOY.md`).
+   from `requirements-web.txt` alone (see `docs/DEPLOY.md`).
 2. **The `fly.toml` cost invariant.** Fly has no free tier but doesn't collect
    invoices under $5/mo. `[[vm]]` is pinned to `shared-cpu-1x`/`256mb`
    (~$2.02/mo always-on) to stay under it; the `fly launch` default of 1GB is
@@ -199,7 +209,7 @@ and will try to call bash instead of answering — always specify `--agent chatt
 
 For batch runs (v1 eval, v2 delta-batch), cold start per call is ~3-5s. Use
 `opencode serve --port 4096` in a separate terminal, plus `OPENCODE_ATTACH=http://localhost:4096`
-env var to cut per-call latency ~4x. Full details in `working_knowledge.md`.
+env var to cut per-call latency ~4x. Full details in `docs/working_knowledge.md`.
 
 ## SEC access
 
@@ -240,7 +250,7 @@ The reranker prefers MD&A prose over number-dense table chunks.
 
 ## The plan
 
-`delta_master_blueprint.md` is the design source of truth. `docs/plan/00-ARCHITECTURE.md` is
+`docs/delta_master_blueprint.md` is the design source of truth. `docs/plan/00-ARCHITECTURE.md` is
 the build-ready spec. Phase files in `docs/plan/phase-XX-*.md` are the execution units. If
 something here conflicts with the blueprint or architecture, those win. Re-read the blueprint
 Part II (Delta stages 1-9, chunking fixes, data model invariants) and ARCHITECTURE §3 (contracts)

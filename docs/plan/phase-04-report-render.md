@@ -6,7 +6,7 @@
 > prose (`delta/narrate.py`) plus a per-chapter evidence drawer; the cards, pills,
 > and per-change churn were deliberately dropped. The CSS token layer, `base.html`,
 > and `report.py`'s assembly/persistence split all still stand. Tier 0
-> (Actions + Pages) was not pursued — see `DEPLOY.md`.
+> (Actions + Pages) was not pursued — see `../DEPLOY.md`.
 
 ## Objective
 Render the Delta change report as HTML (Jinja2) styled to DESIGN.md, plus the CLI summary. Build the CSS token layer from DESIGN.md's design system. Run the batch job for all 7 tickers. Set up Tier 0 deployment (static HTML via GitHub Actions + Pages).
@@ -15,7 +15,7 @@ Render the Delta change report as HTML (Jinja2) styled to DESIGN.md, plus the CL
 Read first:
 - `docs/plan/00-ARCHITECTURE.md` §3.8 (report contracts), §2.5-2.6 (report data schemas)
 - `DESIGN.md` (the full design system — colors, typography, components, spacing, rounded, do's/don'ts)
-- `delta_master_blueprint.md` Part II stage 9, deployment section
+- `../delta_master_blueprint.md` Part II stage 9, deployment section
 - `src/delta/interpret.py` (your phase 03 output — produces the report data)
 
 ## Deliverables

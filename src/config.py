@@ -21,7 +21,11 @@ TICKER_10K_OFFSET = {
     "NVDA": 1,
 }
 
-USER_AGENT = os.environ.get("SEC_USER_AGENT") or "FinDocQA contact@findocqa.dev"
+# SEC asks for a descriptive User-Agent. The warning lives in fetch.py, not here:
+# config.py is imported by the deployed web app, which never touches SEC, and a
+# warning on every container boot would be misleading noise in the logs.
+SEC_USER_AGENT_SET = bool(os.environ.get("SEC_USER_AGENT"))
+USER_AGENT = os.environ.get("SEC_USER_AGENT") or "FinDocQA/1.0"
 SEC_RATE_LIMIT = 8
 
 RAW_DIR = "data/raw"

@@ -22,7 +22,7 @@ from config import TICKERS, DELTA_YEARS_DEFAULT, DELTA_YEARS_MAX
 from fetch import find_n_recent_10ks, fetch_10k_html_for_year, fetch_companyfacts
 from chunk import chunk_sectionaware, _write_chunks
 from delta.align import load_chunks_for_year
-from delta.diff import diff_all_sections, write_diff_records, churn_summary, classification_counts
+from delta.diff import diff_all_sections, write_diff_records, churn_summary
 from delta.xbrl_delta import load_companyfacts, compute_yoy_deltas, build_metric_series
 from delta.report import (
     build_report_data, render_html, render_cli_summary, write_report,

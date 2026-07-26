@@ -24,7 +24,7 @@
   chaptered analyst read — stage 8 `narrate.py`, evidence drawers, citation resolution.
   Phases 04/05 shipped the evidence layer; 06 shipped the thing a human actually reads.
 - Deploy prep hardened phase 05's config into a shippable, effectively-free Fly.io
-  deploy (slim image, cost invariant, `make deploy`). See `DEPLOY.md`.
+  deploy (slim image, cost invariant, `make deploy`). See `../DEPLOY.md`.
 
 ## What changed from the original plan
 
@@ -55,7 +55,7 @@ detected: a text guard (`diff.py:numeric_change_signal`, reusing
 corroboration (`xbrl_change_signal`) flags the most number-dense paragraph when an
 audited financial-section tag moved but text didn't surface it. Orthogonal to the
 tuned thresholds; every upgrade carries an auditable `numeric_guard` reason. See
-`tracker.md` for details and verification.
+`../tracker.md` for details and verification.
 
 ## What "done" looks like (current)
 

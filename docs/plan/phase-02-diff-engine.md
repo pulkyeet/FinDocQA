@@ -7,7 +7,7 @@ Build the full diff engine: complete paragraph alignment with greedy matching, d
 Read first:
 - `docs/plan/00-ARCHITECTURE.md` §3.4 (align), §3.5 (diff), §2.3 (diff record schema)
 - `docs/plan/phase-00-walking-skeleton.md` (you built the minimal align + diff here)
-- `delta_master_blueprint.md` Part II stage 5 (classification table), threshold tuning section
+- `../delta_master_blueprint.md` Part II stage 5 (classification table), threshold tuning section
 - `src/delta/align.py`, `src/delta/diff.py` (your phase 00 implementations)
 
 ## Deliverables
@@ -94,7 +94,7 @@ After running `tune_thresholds.py`, update `DIFF_THRESHOLD_UNCHANGED`, `DIFF_THR
 - Do not modify contracts defined in 00-ARCHITECTURE.md.
 - Do not implement XBRL deltas, LLM interpretation, report rendering, or web app (phases 03-05).
 - Do not change the anchor vocabulary.
-- Do not wire in the Hungarian matching — it's a fallback, not the default. Only use it if the labeled sample shows greedy is insufficient (document this decision in `tracker.md` if it happens).
+- Do not wire in the Hungarian matching — it's a fallback, not the default. Only use it if the labeled sample shows greedy is insufficient (document this decision in `../tracker.md` if it happens).
 - The 50-pair labeled sample is hand-labeled by YOU, not an LLM. Same rule as v1 gold_chunks: the label must come from a source more trustworthy than the system under test.
 
 ## Acceptance

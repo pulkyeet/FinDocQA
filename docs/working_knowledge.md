@@ -265,7 +265,7 @@ make delta-batch
 streamlit run src/dashboard.py
 
 # Check progress
-cat tracker.md
+cat docs/tracker.md
 ```
 
 ## When the user asks for a test / verification

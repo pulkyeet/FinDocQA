@@ -5,7 +5,7 @@ Create the thinnest end-to-end Delta slice: fetch 2 years of 1 ticker, chunk wit
 
 ## Context
 Read first:
-- `delta_master_blueprint.md` Part II (stages 1-5, chunking fixes)
+- `../delta_master_blueprint.md` Part II (stages 1-5, chunking fixes)
 - `docs/plan/00-ARCHITECTURE.md` §2 (data model), §3.1-3.5 (config, fetch, chunk, align, diff contracts)
 - `src/chunk.py` (current section-aware chunker — you're modifying this)
 - `src/embed.py` (`doc_prefix`, `query_prefix`, `collection_name` — reused by align.py)

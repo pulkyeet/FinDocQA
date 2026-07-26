@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repo carries dense project documentation. Before non-trivial work, read:
 
-- **`working_knowledge.md`** — session bootstrap: operational habits, env setup, and every recurring gotcha (Chroma batch limit, E5 prefixes, v2 file naming, chunking fixes, quote validation, thresholds). The single most useful file.
+- **`docs/working_knowledge.md`** — session bootstrap: operational habits, env setup, and every recurring gotcha (Chroma batch limit, E5 prefixes, v2 file naming, chunking fixes, quote validation, thresholds). The single most useful file.
 - **`AGENTS.md`** — project config / agent notes (mirrors much of this file with more run detail).
-- **`delta_master_blueprint.md`** — design source of truth (v1 + v2 merged). Wins over other docs on conflict.
+- **`docs/delta_master_blueprint.md`** — design source of truth (v1 + v2 merged). Wins over other docs on conflict.
 - **`docs/plan/00-ARCHITECTURE.md`** + `docs/plan/phase-0X-*.md` — build-ready contracts, schemas, and per-phase execution units.
 - **`DESIGN.md`** — UI design system (dark canvas, Voltagent-inspired) that the web report renders to.
 

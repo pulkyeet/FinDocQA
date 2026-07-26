@@ -6,8 +6,19 @@ import argparse
 import json
 import time
 import os
+import warnings
 import requests
-from config import TICKERS, TICKER_10K_OFFSET, USER_AGENT, SEC_RATE_LIMIT, RAW_DIR, DELTA_YEARS_DEFAULT, DELTA_YEARS_MAX
+from config import (
+    TICKERS, TICKER_10K_OFFSET, USER_AGENT, SEC_USER_AGENT_SET, SEC_RATE_LIMIT,
+    RAW_DIR, DELTA_YEARS_DEFAULT, DELTA_YEARS_MAX,
+)
+
+if not SEC_USER_AGENT_SET:
+    warnings.warn(
+        "SEC_USER_AGENT not set; using a placeholder. SEC asks for a descriptive "
+        "User-Agent (name + contact) and may rate-limit or block generic ones. "
+        "Set it in src/.env."
+    )
 
 HEADERS = {"User-Agent": USER_AGENT}
 MIN_INTERVAL = 1.0 / SEC_RATE_LIMIT

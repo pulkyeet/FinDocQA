@@ -103,7 +103,7 @@ def generate(prompt):
         timeout=180,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"opencode run failed: {result.stderr}")
+        raise RuntimeError(f"opencode run failed: {result.stderr[:200]}")
     out = result.stdout
     out = re.sub(r"^\x1b\[.*?m", "", out, flags=re.MULTILINE)
     lines = [ln for ln in out.splitlines() if ln.strip() and not ln.startswith("> ")]
