@@ -1,5 +1,11 @@
 # Phase 03 — XBRL + Interpretation
 
+> **Stage 8 changed after this phase.** The per-section trend synthesis built here
+> was superseded by per-*chapter* narrative composition (`delta/narrate.py`, phase
+> 06) — correct but unreadable output: ~27 longitudinal paragraphs with no
+> editorial hierarchy. Stage 6 (XBRL) and stage 7 (interpretation + verbatim quote
+> validation) are unchanged and remain load-bearing.
+
 ## Objective
 
 Add the XBRL numeric backbone (stage 6) and the LLM interpretation + trend

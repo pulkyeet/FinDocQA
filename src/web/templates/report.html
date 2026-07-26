@@ -1,230 +1,265 @@
 {% extends "base.html" %}
 {% block title %}{{ report.ticker }} — Delta Change Report{% endblock %}
 
-{% macro pct_chip(d) %}
-  {% if d and d.pct_change is not none %}
-    {% set p = d.pct_change %}
-    <span class="{% if p > 0.05 %}pct-up{% elif p < -0.05 %}pct-down{% else %}pct-flat{% endif %}">{% if p > 0 %}▲{% elif p < 0 %}▼{% else %}•{% endif %} {{ '%.1f'|format(p|abs) }}%</span>
-  {% else %}
-    <span class="pct-flat">—</span>
-  {% endif %}
+{% macro prose_blocks(blocks) %}
+  {% for b in blocks %}
+    {% if b.type == 'p' %}
+      <p>{{ b.html|safe }}</p>
+    {% else %}
+      <figure class="pull-quote">
+        <div class="pq-row">
+          <div class="pq-side was">
+            <span class="pq-lbl">{{ b.quote.y_old }}</span>
+            <blockquote>{{ b.quote.old_quote or "— no equivalent language —" }}</blockquote>
+          </div>
+          <div class="pq-arrow" aria-hidden="true">&rarr;</div>
+          <div class="pq-side now">
+            <span class="pq-lbl">{{ b.quote.y_new }}</span>
+            <blockquote>{{ b.quote.new_quote }}</blockquote>
+          </div>
+        </div>
+        <figcaption>{{ b.quote.section_name }}</figcaption>
+      </figure>
+    {% endif %}
+  {% endfor %}
 {% endmacro %}
 
-{% macro change_card(ch) %}
-{% set mcode = 'mat' if ch.materiality == 'material' else ('not' if ch.materiality == 'notable' else 'boi') %}
-<div class="change-card {{ 'invalid' if ch._unvalidated else mcode }}">
-  <div class="cc-head">
-    <span class="change-type-tag change-type-{{ ch.change_type }}">{{ ch.change_type }}</span>
-    <span class="mpill {{ mcode }}">{{ ch.materiality }}</span>
-    {% if ch.numeric_guard %}
-    <span class="guard-pill" title="{% if ch.numeric_guard.source == 'xbrl' %}{{ ch.numeric_guard.tag }}: {% endif %}{{ ch.numeric_guard.old }} → {{ ch.numeric_guard.new }}">Δ {{ (ch.numeric_guard.pct * 100) | round(0) | int }}%{% if ch.numeric_guard.source == 'xbrl' %} · XBRL{% endif %}</span>
-    {% endif %}
-    {% if ch._unvalidated %}<span class="unvalidated-flag">&#9888; unvalidated</span>{% endif %}
-    <span class="cc-years">{{ ch._y_old }} → {{ ch._y_new }}</span>
-  </div>
-
-  <p class="cc-summary">{{ ch.summary }}</p>
-
-  {% if ch.why_it_matters %}
-  <div class="cc-why"><b>Why it matters</b> — {{ ch.why_it_matters }}</div>
+{% macro evidence_drawer(ch) %}
+  {% if ch.footnotes %}
+  <details class="evidence">
+    <summary>
+      <span class="ev-count">{{ ch.footnotes|length }}</span>
+      source{{ 's' if ch.footnotes|length != 1 }} cited in this chapter
+      <span class="ev-hint">verbatim filing text, both years</span>
+    </summary>
+    <ol class="ev-list">
+      {% for f in ch.footnotes %}
+      <li id="ev-{{ f.change_id }}">
+        <div class="ev-head">
+          <span class="ev-n">{{ f.n }}</span>
+          <span class="ev-sec">{{ f.section_name }}</span>
+          <span class="ev-yr">{{ f.y_old }} &rarr; {{ f.y_new }}</span>
+        </div>
+        <p class="ev-sum">{{ f.summary }}</p>
+        <div class="ev-quotes">
+          <div class="q was"><span class="q-lbl">{{ f.y_old }}</span><span class="q-txt">{{ f.old_quote or "—" }}</span></div>
+          <div class="q now"><span class="q-lbl">{{ f.y_new }}</span><span class="q-txt">{{ f.new_quote or "—" }}</span></div>
+        </div>
+        <div class="ev-id">{{ f.change_id }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+  </details>
   {% endif %}
-
-  {% if ch.old_quote or ch.new_quote %}
-  <div class="cc-quotes">
-    <div class="q old">
-      <div class="q-lbl"><span>Was</span><span class="yr">{{ ch._y_old }}</span></div>
-      <div class="q-txt">{{ ch.old_quote or "—" }}</div>
-    </div>
-    <div class="q new">
-      <div class="q-lbl"><span>Now</span><span class="yr">{{ ch._y_new }}</span></div>
-      <div class="q-txt">{{ ch.new_quote or "—" }}</div>
-    </div>
-  </div>
-  {% endif %}
-
-  <div class="cc-foot">{{ ch.change_id }}</div>
-</div>
 {% endmacro %}
 
 {% block content %}
 <div class="report-progress" id="progress"></div>
 
-{# ── Hero ── #}
 <header class="report-hero">
-  <div class="hero-eyebrow">Change Report · Five-Year Filing Intelligence</div>
+  <div class="hero-eyebrow">Five-Year Filing Change Report</div>
   <div class="hero-title">
     <span class="hero-ticker">{{ report.ticker }}</span>
     <span class="hero-entity">{{ report.entity_name }}</span>
   </div>
-  <p class="hero-summary">
-    <b>{{ report.summary.material }}</b> material and <b>{{ report.summary.notable }}</b> notable
-    change{{ 's' if report.summary.notable != 1 }} across <b>{{ report.summary.sections_with_content }}</b>
-    sections, spanning {{ report.year_range[0] }} to {{ report.year_range[-1] }}.{% if report.summary.guard %}
-    <b>{{ report.summary.guard }}</b> numeric shift{{ 's' if report.summary.guard != 1 }} were surfaced by the
-    XBRL guard that cosine similarity alone would have missed.{% endif %}
-  </p>
   <div class="hero-meta">
-    <span class="hero-chip"><span class="k">period</span> {{ report.year_range[0] }} → {{ report.year_range[-1] }}</span>
-    <span class="hero-chip"><span class="k">$</span> delta {{ report.ticker }} --years {{ report.year_range|length }}</span>
-    <span class="hero-gen">Generated {{ report.generated_at }}</span>
+    <span class="hero-chip">{{ report.year_range[0] }} &rarr; {{ report.year_range[-1] }}</span>
+    <span class="hero-chip">{{ report.read_time }} min read</span>
+    <span class="hero-chip">{{ '{:,}'.format(report.stats.total_records) }} passages compared</span>
   </div>
 </header>
 
-{# ── At-a-glance stats ── #}
-<div class="stat-row">
-  <div class="stat-card"><div class="v material">{{ report.summary.material }}</div><div class="l">Material</div></div>
-  <div class="stat-card"><div class="v notable">{{ report.summary.notable }}</div><div class="l">Notable</div></div>
-  <div class="stat-card"><div class="v">{{ report.summary.boilerplate }}</div><div class="l">Boilerplate</div></div>
-  <div class="stat-card"><div class="v accent">{{ report.summary.guard }}</div><div class="l">Numeric&nbsp;Guard</div></div>
-  <div class="stat-card"><div class="v">{{ report.summary.sections_with_content }}</div><div class="l">Sections</div></div>
-</div>
-
 <div class="report-layout">
-  {# ── Sticky TOC ── #}
   <aside class="report-toc">
-    <nav class="toc-list" id="toc">
-      <a href="#financials" class="toc-item"><span>Financial Metrics</span></a>
-      <a href="#churn" class="toc-item"><span>Churn Overview</span></a>
-    </nav>
-    <div class="toc-eyebrow">Sections</div>
+    <div class="toc-eyebrow">Contents</div>
     <nav class="toc-list" id="toc-sections">
-      {% for section in report.sections if section.has_content %}
-      <a href="#{{ section.anchor }}" class="toc-item" data-target="{{ section.anchor }}">
-        <span>{{ section.section_name }}</span>
-        {% if section.n_surfaced %}<span class="badge">{{ section.n_surfaced }}</span>{% endif %}
+      {% if report.exec_summary %}
+      <a href="#summary" class="toc-item" data-target="summary"><span>Executive Summary</span></a>
+      {% endif %}
+      {% if report.financials %}
+      <a href="#financials" class="toc-item" data-target="financials"><span>Financial Performance</span></a>
+      {% endif %}
+      {% for ch in report.chapters %}
+      <a href="#{{ ch.id }}" class="toc-item" data-target="{{ ch.id }}">
+        <span>{{ ch.title }}</span>
+        {% if ch.n_cited %}<span class="badge">{{ ch.n_cited }}</span>{% endif %}
       </a>
       {% endfor %}
+      <a href="#detection" class="toc-item" data-target="detection"><span>What the Engine Found</span></a>
+      <a href="#method" class="toc-item" data-target="method"><span>Methodology</span></a>
     </nav>
   </aside>
 
   <main class="report-main">
 
-    {# ── Financial metrics ── #}
-    {% if report.xbrl_deltas and report.xbrl_deltas._tag_order %}
-    <section id="financials">
-      <div class="block-head">
-        <h2>Key Financial Metrics</h2>
-        <span class="note">Sourced from XBRL — never extracted from prose</span>
+    {# ── Executive summary ── #}
+    {% if report.exec_summary %}
+    <section id="summary" class="chapter lede">
+      <div class="ch-head">
+        <span class="ch-kicker">Overview</span>
+        <h2>Executive Summary</h2>
       </div>
-      <div style="overflow-x: auto;">
-      <table class="metrics-table">
-        <thead>
-          <tr>
-            <th class="metric-col">Metric</th>
-            <th>Latest</th>
-            {% for yp in report.xbrl_deltas._year_pairs %}<th>{{ yp.split('-')[1] }}</th>{% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for tag in report.xbrl_deltas._tag_order %}
-          {% set td = report.xbrl_deltas[tag] %}
-          <tr>
-            <td>
-              <span class="metric-name">{{ report.xbrl_deltas._labels[tag] }}</span>
-              <span class="metric-tag">{{ tag }}</span>
-            </td>
-            <td class="metric-latest">{{ report.xbrl_deltas._latest[tag].value_str }}</td>
-            {% for yp in report.xbrl_deltas._year_pairs %}
-            <td class="pct-cell">{{ pct_chip(td.get(yp)) }}</td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="prose">
+        {% for p in report.exec_summary %}<p>{{ p|safe }}</p>{% endfor %}
       </div>
     </section>
     {% endif %}
 
-    {# ── Churn overview ── #}
-    {% set churn_sections = report.sections | selectattr('max_churn', 'greaterthan', 0) | list %}
-    {% if churn_sections %}
-    <section id="churn">
-      <div class="block-head">
-        <h2>Churn Overview</h2>
-        <span class="note">Fraction of each section's text that changed, year over year</span>
+    {# ── Financial performance ── #}
+    {% if report.financials %}
+    <section id="financials" class="chapter">
+      <div class="ch-head">
+        <span class="ch-kicker">Chapter 01</span>
+        <h2>Financial Performance</h2>
+        <p class="ch-sub">Audited figures for every year, as filed</p>
       </div>
-      <div style="overflow-x: auto;">
-      <table class="churn-table">
-        <thead>
-          <tr>
-            <th class="sec">Section</th>
-            {% for yp in report._year_pairs %}<th>{{ yp[1] }}</th>{% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for section in churn_sections | sort(attribute='max_churn', reverse=true) %}
-          <tr>
-            <td class="sec"><a href="#{{ section.anchor }}">{{ section.section_name }}</a></td>
-            {% for yp in report._year_pairs %}
-            {% set score = section.churn_scores.get(yp[0] ~ '-' ~ yp[1]) %}
-            <td class="heat-cell">
-              {% if score is not none %}
-              <span class="heat {% if score == 0 %}zero{% endif %}" style="background: rgba(0,217,146,{{ '%.2f'|format(score * 0.55) }});">{{ '%.2f'|format(score) }}</span>
-              {% else %}<span class="heat zero">—</span>{% endif %}
-            </td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+
+      {% if report.financial_narrative %}
+      <div class="prose">{{ prose_blocks(report.financial_narrative.blocks) }}</div>
+      {% endif %}
+
+      {% for g in report.financials %}
+      <div class="fin-table-wrap">
+        <div class="fin-title">{{ g.title }}</div>
+        <div class="table-scroll">
+          <table class="fin-table">
+            <thead>
+              <tr>
+                <th class="metric-col">{{ g.title }}</th>
+                {% for fy in report.year_range %}<th>{{ fy }}</th>{% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in g.rows %}
+              <tr>
+                <td class="metric-col">
+                  <span class="metric-name">{{ row.label }}</span>
+                  <span class="metric-tag">{{ row.tag }}</span>
+                </td>
+                {% for c in row.cells %}
+                <td class="num">
+                  <span class="v">{{ c.value_str }}</span>
+                  {% if c.pct_str %}<span class="d {{ c.direction }}">({{ c.pct_str }})</span>{% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
+      {% endfor %}
+      <p class="fin-note">Sourced from XBRL company facts as filed with the SEC — never extracted from prose. Percentages are year-over-year against the prior fiscal year shown.</p>
+
+      {% if report.financial_narrative %}{{ evidence_drawer(report.financial_narrative) }}{% endif %}
     </section>
     {% endif %}
 
-    {# ── Per-section changes ── #}
-    {% for section in report.sections if section.has_content %}
-    <section id="{{ section.anchor }}" class="section-block">
-      <div class="sec-head">
-        <h3 class="sec-title">{{ section.section_name }}</h3>
-        <div class="sec-stats">
-          {% if section.n_material %}<span class="count-pill mat">{{ section.n_material }} material</span>{% endif %}
-          {% if section.n_notable %}<span class="count-pill">{{ section.n_notable }} notable</span>{% endif %}
-          <div class="sec-churn">
-            <div class="churn-bar-bg"><div class="churn-bar" style="width: {{ (section.max_churn * 100)|round|int }}%;"></div></div>
-            {{ '%.2f'|format(section.max_churn) }}
-          </div>
-        </div>
+    {# ── Narrative chapters ── #}
+    {% for ch in report.chapters %}
+    <section id="{{ ch.id }}" class="chapter">
+      <div class="ch-head">
+        <span class="ch-kicker">Chapter {{ '%02d'|format(loop.index + (1 if report.financials else 0)) }}</span>
+        <h2>{{ ch.title }}</h2>
+        <p class="ch-sub">{{ ch.subtitle }}</p>
       </div>
-
-      {% set material_changes = section.changes | selectattr('materiality', 'equalto', 'material') | list %}
-      {% set notable_changes = section.changes | selectattr('materiality', 'equalto', 'notable') | list %}
-      {% set boilerplate_changes = section.changes | selectattr('materiality', 'equalto', 'boilerplate') | list %}
-
-      {% if material_changes %}
-      <div class="mat-label material">Material Changes</div>
-      <div class="change-stack">
-        {% for ch in material_changes %}{{ change_card(ch) }}{% endfor %}
-      </div>
-      {% endif %}
-
-      {% if notable_changes %}
-      <div class="mat-label notable">Notable Changes</div>
-      <div class="change-stack">
-        {% for ch in notable_changes %}{{ change_card(ch) }}{% endfor %}
-      </div>
-      {% endif %}
-
-      {% if not material_changes and not notable_changes and not section.trend_narrative %}
-      <p class="empty-note">Only boilerplate churn in this section — no material or notable changes.</p>
-      {% endif %}
-
-      {% if boilerplate_changes %}
-      <details class="boi-details">
-        <summary>{{ boilerplate_changes|length }} boilerplate change{{ 's' if boilerplate_changes|length != 1 }} suppressed</summary>
-        <div class="change-stack">
-          {% for ch in boilerplate_changes %}{{ change_card(ch) }}{% endfor %}
-        </div>
-      </details>
-      {% endif %}
-
-      {% if section.trend_narrative %}
-      <div class="trend-callout">
-        <div class="te">Five-year trend</div>
-        <p>{{ section.trend_narrative }}</p>
-      </div>
-      {% endif %}
+      <div class="prose">{{ prose_blocks(ch.blocks) }}</div>
+      {{ evidence_drawer(ch) }}
     </section>
     {% endfor %}
+
+    {# ── Detection statistics ── #}
+    <section id="detection" class="chapter">
+      <div class="ch-head">
+        <span class="ch-kicker">Appendix A</span>
+        <h2>What the Engine Found</h2>
+        <p class="ch-sub">The deterministic layer beneath every claim above</p>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card"><div class="v">{{ '{:,}'.format(report.stats.total_records) }}</div><div class="l">Passages compared</div></div>
+        <div class="stat-card"><div class="v accent">{{ '{:,}'.format(report.stats.total_changed) }}</div><div class="l">Flagged as changed</div></div>
+        <div class="stat-card"><div class="v material">{{ report.stats.material }}</div><div class="l">Judged material</div></div>
+        <div class="stat-card"><div class="v">{{ report.stats.guard }}</div><div class="l">Numeric guard</div></div>
+      </div>
+
+      <div class="breakdown">
+        {% for b in report.stats.breakdown %}
+        <div class="bd-row">
+          <div class="bd-label">{{ b.label }}</div>
+          <div class="bd-bar-bg"><div class="bd-bar {{ b.key }}" style="width: {{ b.pct }}%;"></div></div>
+          <div class="bd-num">{{ '{:,}'.format(b.count) }}</div>
+          <div class="bd-pct">{{ b.pct }}%</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <h3 class="sub-head">Section churn, year over year</h3>
+      <p class="sub-note">Fraction of each section's text the engine classified as changed. High churn is not the same as high signal — Risk Factors churn every year; what matters is whether the change survives interpretation.{% if report.stats.sections_omitted %} {{ report.stats.sections_omitted }} section{{ 's' if report.stats.sections_omitted != 1 }} with fewer than {{ report.stats.churn_min_records }} compared passages {{ 'are' if report.stats.sections_omitted != 1 else 'is' }} omitted — churn over one or two paragraphs is noise.{% endif %}</p>
+      <div class="table-scroll">
+        <table class="churn-table">
+          <thead>
+            <tr>
+              <th class="sec">Section</th>
+              {% for lbl in report.stats.year_pair_labels %}<th>{{ lbl }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for sec in report.stats.sections %}
+            <tr>
+              <td class="sec">{{ sec.section_name }}</td>
+              {% for yp in report.stats.year_pairs %}
+              {% set score = sec.churn_scores.get(yp) %}
+              <td class="heat-cell">
+                {% if score is not none %}
+                <span class="heat{% if score == 0 %} zero{% endif %}" style="background: rgba(0,217,146,{{ '%.2f'|format(score * 0.55) }});">{{ '%.2f'|format(score) }}</span>
+                {% else %}<span class="heat zero">—</span>{% endif %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if report.stats.unvalidated %}
+      <p class="fin-note">{{ report.stats.unvalidated }} interpretation{{ 's' if report.stats.unvalidated != 1 }} failed verbatim-quote validation and {{ 'were' if report.stats.unvalidated != 1 else 'was' }} excluded from the narrative entirely.</p>
+      {% endif %}
+    </section>
+
+    {# ── Methodology ── #}
+    <section id="method" class="chapter">
+      <div class="ch-head">
+        <span class="ch-kicker">Appendix B</span>
+        <h2>Methodology</h2>
+        <p class="ch-sub">How this report was produced</p>
+      </div>
+      <div class="prose method">
+        <p>This report is generated by a nine-stage pipeline over {{ report.year_range|length }} consecutive 10-K filings retrieved directly from the SEC's EDGAR system. The raw filings are the single source of truth; nothing in this document is sourced from news, analyst commentary, or the language model's own knowledge of {{ report.entity_name.rstrip('.') }}.</p>
+
+        <p><b>Parsing and anchoring.</b> Each filing is parsed into sections and labelled with a stable anchor drawn from a fixed vocabulary — <span class="mono">item1a_risk</span>, <span class="mono">item7_mdna</span>, <span class="mono">income_statement</span>, and so on. Anchors matter because 10-K item numbering drifts between years and between filers: a section that is Item 7 in one year may sit at a different offset in the next. Anchoring gives every year a shared coordinate system. Coverage is asserted at ingest — if the critical anchors fail to resolve, the pipeline raises rather than silently producing a misaligned comparison.</p>
+
+        <p><b>Alignment.</b> Sections are matched across years by anchor equality. Within each matched section, the text is split into paragraphs and every paragraph is embedded with a sentence-transformer model. Paragraphs are then aligned by cosine similarity, which tolerates the reordering, merging, and splitting that occurs between filings. Paragraphs with no counterpart above the similarity floor are recorded as additions or removals rather than forced into a spurious match.</p>
+
+        <p><b>Detection is deterministic.</b> This is the load-bearing claim of the whole system. The language model never finds a change. Classification into <i>unchanged</i>, <i>minor revision</i>, and <i>major revision</i> is a function of cosine similarity against thresholds tuned on a hand-labelled sample. The thresholds are set for high recall deliberately: it is better to over-flag and let interpretation discard boilerplate than to miss a real change that never reaches a human.</p>
+
+        <p><b>The numeric guard.</b> Cosine similarity has a specific blind spot — it is nearly insensitive to value-only changes. A sentence reporting revenue of $100 million and the same sentence reporting $489 million score above 0.99 and would be classified unchanged. A separate deterministic guard runs only over records the classifier called unchanged, extracts numbers from both years, and upgrades any record showing a material move. Where the section has audited XBRL backing, the guard corroborates against the filed financial tags. {% if report.stats.guard %}In this report the guard surfaced {{ report.stats.guard }} change{{ 's' if report.stats.guard != 1 }} that similarity alone would have discarded.{% endif %}</p>
+
+        <p><b>Interpretation is generative — and constrained.</b> Only pre-verified change pairs are sent to a language model, and only to explain them. For each pair the model returns a summary, a materiality judgement, and short quotes evidencing the change. Every quote is then checked to be a literal substring of the filing text it claims to come from. A quote that fails is retried once; if it fails again the record is marked unvalidated and excluded from this report's prose. That check is what makes the citations in the chapters above trustworthy rather than plausible.</p>
+
+        <p><b>Composition.</b> Chapter narratives are written from the surviving material and notable interpretations only, grouped by 10-K section. The writer sees the verified summaries, verbatim quote pairs, and the audited XBRL series — nothing else — and cites each claim back to a specific change record. Citations naming a record that does not exist are dropped before rendering, so the evidence drawer beneath each chapter can only contain real, quote-validated changes.</p>
+
+        <p><b>Financial figures.</b> Every number in the Financial Performance tables comes from XBRL company facts as filed with the SEC, keyed by concept tag and fiscal year, preferring annual 10-K entries. No figure is extracted from prose or produced by the language model.</p>
+
+        <p class="method-limits"><b>Limitations.</b> Materiality is a model judgement and will not always match yours. High-recall thresholds mean the flagged count far exceeds the genuinely interesting count. Anchor-based alignment can misbehave if a filer restructures a section substantially between years. And the report describes what <i>changed in the filing</i> — a company that stops disclosing something produces a removal, which is not the same as the underlying fact having gone away.</p>
+      </div>
+    </section>
+
+    <div class="report-foot">
+      <span>{{ report.ticker }} · {{ report.year_range[0] }}–{{ report.year_range[-1] }}</span>
+      <span class="mono">delta {{ report.ticker }} --years {{ report.year_range|length }}</span>
+      <span>Generated {{ report.generated_at }}</span>
+    </div>
 
   </main>
 </div>
@@ -251,6 +286,23 @@
   window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', onScroll, { passive: true });
   onScroll();
+
+  // A citation click should open the drawer it points into, not jump to a
+  // collapsed <details> the reader then has to find and expand.
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest ? e.target.closest('sup.cite a') : null;
+    if (!a) return;
+    var target = document.getElementById(a.getAttribute('href').slice(1));
+    if (!target) return;
+    var d = target.closest('details');
+    if (d && !d.open) d.open = true;
+    setTimeout(function () {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.add('flash');
+      setTimeout(function () { target.classList.remove('flash'); }, 1600);
+    }, 0);
+    e.preventDefault();
+  });
 })();
 </script>
 {% endblock %}

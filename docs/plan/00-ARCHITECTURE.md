@@ -80,9 +80,16 @@ FinDocQA/
 | Companyfacts | `{ticker}_companyfacts.json` | `AAPL_companyfacts.json` (unchanged) |
 | Chunks (sectionaware) | `{ticker}_FY{yyyy}_sectionaware.json` | `AAPL_FY2025_sectionaware.json` |
 | Diff records | `diffs/{ticker}/FY{yyyy}_FY{yyyy}.jsonl` | `diffs/AAPL/FY2024_FY2025.jsonl` |
-| Interpretation records | `diffs/{ticker}/FY{yyyy}_FY{yyyy}_interp.jsonl` | `diffs/AAPL/FY2024_FY2025_interp.jsonl` |
-| Trend narratives | `diffs/{ticker}/{anchor}_trend.txt` | `diffs/AAPL/item1a_risk_trend.txt` |
+| Interpretation records (stage 7) | `diffs/{ticker}/_interpretations.jsonl` | `diffs/AAPL/_interpretations.jsonl` |
+| Composed narrative (stage 8) | `diffs/{ticker}/_narrative.json` | `diffs/AAPL/_narrative.json` |
 | Report | `reports/{ticker}.html` | `reports/AAPL.html` |
+
+> **Shipped naming differs from the original spec above-left.** Interpretations
+> persist to one `_interpretations.jsonl` per ticker (not per year-pair), and
+> stage 8 persists composed chapter prose as `_narrative.json` — replacing the
+> planned per-anchor `{anchor}_trend.txt` files, since stage 8 is now
+> per-*chapter* narrative composition rather than per-section trend synthesis.
+> Both are persisted so `rerender.py` rebuilds HTML with zero LLM calls.
 
 **Fiscal year label:** derived from `period_end` in the 10-K meta. `fiscal_year_label(period_end: str) -> str` returns `"FY2025"` from `"2025-09-27"`. Logic: extract the 4-digit year from period_end. For NVDA (FY ends January), `period_end="2025-01-25"` → `"FY2025"` (the year the fiscal year ENDS in, per SEC convention).
 
@@ -427,7 +434,7 @@ def main():
        c. diff classify -> diff records
        d. XBRL delta join
        e. LLM interpretation (unless --no-llm)
-    4. trend synthesis per section
+    4. narrative composition per chapter (delta/narrate.py, stage 8)
     5. render HTML + CLI summary
     """
 ```
@@ -534,10 +541,11 @@ flowchart TD
     J --> K{quote validation passes?}
     K -- yes --> L[accept interpretation]
     K -- no --> M[retry once, then flag unvalidated]
-    L --> N[delta/interpret.py: trend synthesis per section]
+    L --> N[delta/narrate.py: chapter prose + citations, stage 8]
     M --> N
     N --> O[delta/report.py: Jinja2 HTML + CLI]
     O --> P[data/reports/]
     O --> Q[CLI summary]
-    P --> R[web/app.py: FastAPI serves report]
+    P --> R[web/app.py: FastAPI serves pre-built report]
+    R --> S[Fly.io: baked into slim image, see DEPLOY.md]
 ```

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}FinDocQA Delta — Filing Change Intelligence{% endblock %}
+{% block title %}Delta — Filing Change Intelligence{% endblock %}
 {% block head %}
 <style>
   .hero {
@@ -169,11 +169,13 @@
 {% block content %}
 
 <div class="hero">
+  <img src="/static/img/delta.png?v={{ static_v('img/delta.png') }}" alt="" class="hero-mark">
   <div class="eyebrow">Filing Change Intelligence</div>
   <h1>Understand what changed between 10-K filings.</h1>
   <p>
-    Delta analyzes five years of SEC filings, surfaces material changes,
-    and explains why they matter — with side-by-side quotes from both years.
+    Delta reads five years of SEC filings and writes the report an analyst would —
+    what changed, when, and why it matters, with every claim traced to verbatim
+    text from both years.
   </p>
   <span class="code-inline-chip" style="font-size: var(--text-code);">$ python delta.py AAPL --years 5</span>
 </div>
@@ -213,20 +215,20 @@
     </div>
     <div class="how-card">
       <span class="step-num">02</span>
-      <h3>LLM interpretation</h3>
+      <h3>Verified interpretation</h3>
       <p>
-        Only changed passages reach the model. It classifies each change
-        (expanded, softened, reworded), assigns materiality, and writes a summary
-        backed by verbatim quotes from both filings.
+        Only changed passages reach the model, and only to explain them. Every
+        quote it returns must be a literal substring of the filing — quotes that
+        fail validation are dropped, never rendered.
       </p>
     </div>
     <div class="how-card">
       <span class="step-num">03</span>
-      <h3>XBRL numeric context</h3>
+      <h3>A report, not a diff</h3>
       <p>
-        Revenue, R&amp;D, net income, and other key metrics come from structured
-        XBRL data — never extracted from prose. The LLM sees the real numbers,
-        not hallucinated ones.
+        The verified changes are composed into chapters that follow the 10-K's own
+        structure — a 15-minute read, with audited XBRL figures for every year and
+        a citation behind every claim.
       </p>
     </div>
   </div>

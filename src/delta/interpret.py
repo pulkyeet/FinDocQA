@@ -1,4 +1,7 @@
-"""Stages 7-8: LLM interpretation of diff records and trend synthesis."""
+"""Stage 7: LLM interpretation of diff records.
+
+Composition of those interpretations into report prose is stage 8 (delta/narrate.py).
+"""
 
 import json
 import re
@@ -11,24 +14,52 @@ from config import (
     OPENROUTER_API_KEY, OPENROUTER_MODEL, OPENROUTER_BASE_URL,
     sanitize_prompt,
 )
-from delta.prompts import INTERPRETATION_PROMPT, SYNTHESIS_PROMPT
+from delta.prompts import INTERPRETATION_PROMPT
 from delta.xbrl_delta import deltas_for_section, format_xbrl_context
 
 VALID_CHANGE_TYPES = {"added", "removed", "expanded", "softened", "strengthened", "reworded"}
 VALID_MATERIALITIES = {"boilerplate", "notable", "material"}
 
+PROMPT_TEXT_LIMIT = 500
 
-def call_llm(prompt: str, timeout: int = 60) -> str:
+
+def _truncate_at_word_boundary(text: str, limit: int = PROMPT_TEXT_LIMIT) -> str:
+    """Truncate to at most `limit` chars without cutting a word in half.
+
+    A hard `text[:limit]` slice can land mid-word (e.g. "...confirmed the
+    Comm"). Since the LLM only ever sees this truncated text, any quote it
+    copies from near the boundary inherits the same mid-word cut. Backing up
+    to the last whitespace keeps every quote a whole word.
+    """
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    boundary = cut.rfind(" ")
+    return cut[:boundary] if boundary > 0 else cut
+
+
+# Stage 7 extracts JSON; stage 8 writes prose. Sending the JSON system prompt to
+# the narrative stage biases it toward structured output, so the caller picks.
+SYSTEM_JSON = ("You are a precise financial document analyst. Output only valid "
+               "JSON. Copy quotes verbatim.")
+SYSTEM_PROSE = ("You are a senior equity analyst writing for institutional "
+                "investors. Write clear, specific, well-sourced prose. Never "
+                "invent facts or figures.")
+
+
+def call_llm(prompt: str, timeout: int = 60, system: str = SYSTEM_JSON,
+             max_tokens: int = 4096) -> str:
     """Call LLM via OpenRouter API. Falls back to opencode subprocess if no API key."""
     prompt = sanitize_prompt(prompt)
 
     if OPENROUTER_API_KEY:
-        return _call_openrouter(prompt, timeout)
+        return _call_openrouter(prompt, timeout, system, max_tokens)
 
     return _call_opencode(prompt, timeout)
 
 
-def _call_openrouter(prompt: str, timeout: int) -> str:
+def _call_openrouter(prompt: str, timeout: int, system: str = SYSTEM_JSON,
+                     max_tokens: int = 4096) -> str:
     """Call OpenRouter API with OpenAI-compatible chat format."""
     try:
         resp = _requests.post(
@@ -40,17 +71,22 @@ def _call_openrouter(prompt: str, timeout: int) -> str:
             json={
                 "model": OPENROUTER_MODEL,
                 "messages": [
-                    {"role": "system", "content": "You are a precise financial document analyst. Output only valid JSON. Copy quotes verbatim."},
+                    {"role": "system", "content": system},
                     {"role": "user", "content": prompt},
                 ],
                 "temperature": 0.0,
-                "max_tokens": 4096,
+                "max_tokens": max_tokens,
             },
             timeout=timeout,
         )
         resp.raise_for_status()
         data = resp.json()
-        content = data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
+        content = choice["message"]["content"]
+        # A length-capped response ends mid-sentence; flag it so the caller can
+        # drop the dangling fragment rather than render half a claim.
+        if choice.get("finish_reason") == "length":
+            return content.strip() + "\n[TRUNCATED]"
         return content.strip()
     except _requests.exceptions.Timeout:
         return "[TIMEOUT]"
@@ -145,8 +181,8 @@ def interpret_section_pair(diff_records: list[dict], xbrl_deltas: dict,
         entry = {
             "change_id": r.get("change_id", ""),
             "classification": cls,
-            "old_text": old_text[:500],
-            "new_text": new_text[:500],
+            "old_text": _truncate_at_word_boundary(old_text),
+            "new_text": _truncate_at_word_boundary(new_text),
         }
         changes.append(entry)
 
@@ -293,68 +329,6 @@ def interpret_ticker(ticker: str, records_by_year: dict, xbrl_deltas: dict,
             all_interpretations.setdefault(anchor, []).extend(interps)
 
     return all_interpretations
-
-
-def synthesize_trend(interpretations: list[dict], anchor: str, year_pairs: list,
-                     section_names: dict[str, str] | None = None, timeout: int = 180) -> str:
-    """Stage 8: one LLM call per section, longitudinal narrative."""
-    if section_names is None:
-        section_names = {}
-
-    valid = [ir for ir in interpretations if not ir.get("_unvalidated")]
-    if len(valid) < 2:
-        return ""
-
-    section_name = section_names.get(anchor, anchor)
-    years = []
-    for y_old, y_new in year_pairs:
-        years.extend([y_old, y_new])
-    year_range = f"{years[0]} to {years[-1]}"
-
-    interps_for_prompt = []
-    for ir in valid:
-        interps_for_prompt.append({
-            "change_id": ir.get("change_id"),
-            "change_type": ir.get("change_type"),
-            "materiality": ir.get("materiality"),
-            "summary": ir.get("summary"),
-            "why_it_matters": ir.get("why_it_matters"),
-        })
-
-    interpretations_json = json.dumps(interps_for_prompt, indent=2)
-
-    prompt = SYNTHESIS_PROMPT.format(
-        ticker="this company",
-        section_name=section_name,
-        year_range=year_range,
-        interpretations_json=interpretations_json,
-    )
-
-    raw = call_llm(prompt, timeout=timeout)
-    if raw.startswith("[TIMEOUT]") or raw.startswith("[ERROR"):
-        return ""
-
-    raw = raw.strip()
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, dict) and "narrative" in parsed:
-            raw = parsed["narrative"]
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    return raw
-
-
-def synthesize_trends(ticker: str, interpretations: dict[str, list[dict]],
-                      section_names: dict[str, str] | None,
-                      year_pairs: list) -> dict[str, str]:
-    """Run trend synthesis for all sections with enough interpretations."""
-    trends = {}
-    for anchor, interps in sorted(interpretations.items()):
-        trends[anchor] = synthesize_trend(
-            interps, anchor, year_pairs, section_names=section_names
-        )
-    return trends
 
 
 def _parse_json_from_response(response: str) -> list:

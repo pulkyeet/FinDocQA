@@ -1,4 +1,4 @@
-"""Route handlers for FinDocQA Delta web server.
+"""Route handlers for the Delta web server.
 
 Static deployment: reports are pre-built offline (`make delta-batch`) and served
 as static HTML. Live generation is intentionally disabled — the deploy image has

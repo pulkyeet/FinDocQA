@@ -3,19 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}FinDocQA Delta{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/tokens.css">
-  <style>
-    .nav-bar .nav-brand { display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
-    .nav-bar .nav-brand .b1 { font-size: var(--text-body-md); font-weight: 600; color: var(--color-primary); }
-    .nav-bar .nav-brand .b2 { font-size: var(--text-body-sm); font-weight: 500; color: var(--color-mute); }
-    .nav-bar .nav-right { margin-left: auto; display: flex; gap: var(--space-lg); align-items: center; }
-  </style>
+  <title>{% block title %}Delta{% endblock %}</title>
+  <link rel="icon" type="image/png" href="/static/img/delta.png?v={{ static_v('img/delta.png') }}">
+  <link rel="stylesheet" href="/static/css/tokens.css?v={{ static_v('css/tokens.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
   <nav class="nav-bar">
-    <a href="/" class="nav-brand"><span class="b1">FinDocQA</span><span class="b2">/ Delta</span></a>
+    <a href="/" class="nav-brand">
+      <img src="/static/img/delta.png?v={{ static_v('img/delta.png') }}" alt="" class="brand-mark">
+      <span class="brand-word">Delta</span>
+    </a>
     <div class="nav-right">
       <a href="/" class="nav-link">All reports</a>
       {% block nav_extra %}{% endblock %}
@@ -25,7 +23,8 @@
   {% block content %}{% endblock %}
 
   <footer class="footer">
-    FinDocQA Delta — Filing Change Intelligence Engine<br>
+    <img src="/static/img/delta.png?v={{ static_v('img/delta.png') }}" alt="" class="footer-mark">
+    <div>Delta — Filing Change Intelligence</div>
     <span class="caption">Detection is deterministic. Interpretation is generative. Every claim traces to a diff record.</span>
   </footer>
 

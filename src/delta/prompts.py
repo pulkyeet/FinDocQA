@@ -1,4 +1,5 @@
-"""Prompt templates for Delta LLM interpretation and trend synthesis."""
+"""Prompt templates for Delta LLM interpretation (stage 7) and narrative
+composition (stage 8)."""
 
 INTERPRETATION_PROMPT = """You are analyzing changes in {ticker}'s 10-K, section {section_name},
 FY{y1} vs FY{y2}. Below are passage pairs a deterministic diff engine flagged as changed,
@@ -46,17 +47,74 @@ Changes:
 {changes_json}"""
 
 
-SYNTHESIS_PROMPT = """You are writing a longitudinal narrative for {ticker}'s {section_name}
-section across {year_range}. Below are the interpreted changes for each year pair.
+CHAPTER_NARRATIVE_PROMPT = """You are a senior equity analyst writing one chapter of a
+five-year change report on {entity} ({ticker}), covering {year_range}.
 
-Write a 3-to-6 sentence narrative tracing how this section evolved over time.
-Reference specific changes, their timing, and their direction (appeared, expanded,
-softened, removed).
+Chapter: **{chapter_title}** — {chapter_subtitle}
 
-Rules:
-- Use ONLY the provided interpretation records. Do not infer changes not shown.
-- Do not use outside knowledge of the company.
-- Be specific: name what changed and when, not vague generalities.
+Your only source is the numbered evidence below. Each item is a verified change
+between two consecutive 10-K filings, found by a deterministic diff engine: the
+"was"/"now" quotes are verbatim filing text, not paraphrase.
 
-Interpretations:
-{interpretations_json}"""
+{xbrl_block}
+
+Write {min_words}-{max_words} words of flowing analytical prose.
+
+WHAT TO WRITE ABOUT — the substance of the change, not its bookkeeping:
+- Say what the company actually did, feared, gained, or lost. "Apple began
+  disclosing India as a named growth market in FY2023, having previously
+  grouped it under Rest of Asia Pacific" — not "the segment paragraph was
+  modified."
+- Trace direction and timing across the five years. When did a theme first
+  appear? Did it intensify, soften, or vanish? A risk that appears in FY2022
+  and is gone by FY2025 is a story.
+- Group by theme (supply chain, AI, regulation, a named geography, pricing
+  power, litigation), not by year and not by filing paragraph.
+- Where numbers are given above, tie the language change to the number. Prose
+  hardening while the metric deteriorates is the single most valuable
+  observation you can make.
+
+HARD RULES:
+- Every substantive claim must carry a citation in the form [E7]. Cite the
+  evidence item that supports it. Multiple: [E7][E12].
+- Use ONLY the evidence and figures provided. You have no outside knowledge of
+  this company. Never invent a number, date, product, or place not present above.
+- Never mention the diff engine, similarity scores, classifications, change
+  types, materiality labels, or the words "evidence item". The reader is
+  looking at a finance report, not a tool's output.
+- No headings, no bullet lists, no markdown. Continuous paragraphs separated by
+  a blank line.
+- If the evidence is thin, write a shorter, honest chapter. Do not pad.
+
+Then choose up to 2 evidence items whose was/now contrast is most striking to
+display as pull-quotes.
+
+OUTPUT FORMAT — exactly this, nothing else:
+NARRATIVE:
+<your prose>
+
+PULL_QUOTES: E3, E12
+
+EVIDENCE:
+{evidence_block}"""
+
+
+EXEC_SUMMARY_PROMPT = """You are a senior equity analyst. Below are the chapters of a
+five-year change report on {entity} ({ticker}), covering {year_range}, plus the
+audited financial series.
+
+{xbrl_block}
+
+Write the executive summary: {min_words}-{max_words} words, 3-4 paragraphs.
+
+- Lead with the single most consequential shift across the five years.
+- Name the two or three themes that run through multiple chapters.
+- Where the numbers and the language disagree, say so plainly.
+- No headings, no bullets, no markdown. No citations. Do not mention the diff
+  engine or how the report was produced.
+- Use ONLY what is below. Invent nothing.
+
+Output the summary text and nothing else.
+
+CHAPTERS:
+{chapters_block}"""

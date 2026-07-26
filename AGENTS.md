@@ -36,7 +36,14 @@ Or from repo root:
 ```bash
 make delta-batch    # all 7 tickers → data/reports/*.html
 make web            # FastAPI server at localhost:8000
+make rerender-all   # rebuild HTML from persisted output — NO LLM calls (template/CSS work)
+make narrate-all    # recompose chapter prose (~6 LLM calls/ticker), then render (prompt work)
+make deploy         # rerender-all, then flyctl deploy (see DEPLOY.md)
 ```
+
+**Never re-run the full pipeline to check a template change** — `make rerender`
+costs nothing. Both stage-7 (`_interpretations.jsonl`) and stage-8
+(`_narrative.json`) output are persisted for exactly this reason.
 
 ### v1 (eval harness) — the foundation
 
@@ -115,8 +122,16 @@ fetch (5 yrs) → parse + anchor → align sections (anchor equality)
     → align paragraphs (embeddings) → deterministic diff classification
     → numeric guard (rescues value-only changes cosine calls "unchanged")
     → XBRL numeric deltas joined → LLM interpretation (changed pairs only)
-    → trend synthesis → report render
+    → narrative composition (chapters, stage 8) → report render
 ```
+
+**Stage 8 (`delta/narrate.py`) is the readability layer** — one LLM call per
+chapter over that chapter's material/notable interpretations, producing 600–900
+words of analyst prose. The deliverable is the *report a human reads*, not the
+diff; the diff is the evidence layer beneath it. Traceability survives the prose
+via short evidence labels (`E1`, `E7`) that `resolve_citations()` renumbers into
+`<sup>` links in the chapter's evidence drawer, silently dropping any label not
+in the pool. Chapters are **data, not template logic** (`config.py:REPORT_CHAPTERS`).
 
 The **numeric guard** (`diff.py:numeric_change_signal` + `xbrl_change_signal`) fixes
 cosine's numeric-blindness: it runs only on `unchanged` records and upgrades any with
@@ -142,7 +157,36 @@ change sets. Every LLM claim traces to a diff record with verbatim quotes from b
 - Raw: `{ticker}_FY{yyyy}_10k.html` (was `{ticker}_10k.html`)
 - Chunks: `{ticker}_FY{yyyy}_sectionaware.json` (was `{ticker}_sectionaware.json`)
 - Diffs: `data/diffs/{ticker}/FY{yyyy}_FY{yyyy}.jsonl`
+- Interpretations (stage 7, expensive): `data/diffs/{ticker}/_interpretations.jsonl`
+- Composed narrative (stage 8): `data/diffs/{ticker}/_narrative.json`
 - Reports: `data/reports/{ticker}.html`
+
+## Deploy (Fly.io, static) — `make deploy`
+
+Full procedure in `DEPLOY.md`; gotchas in `working_knowledge.md`. The essentials:
+
+Reports are built **offline** and baked into the image. The deployed app serves
+pre-built HTML and has **no live generation path** — `/api/trigger` returns `501`,
+and the image carries no pipeline deps. Adding a ticker means running the pipeline
+locally and redeploying. Fly builds remotely, so no local Docker daemon is needed
+(Docker Desktop's WSL integration is off on this machine anyway).
+
+Two things to not break:
+
+1. **`config.py` must stay import-light** (`os` + `dotenv` only).
+   `requirements-web.txt` is sized to it — fastapi, uvicorn, jinja2,
+   python-dotenv. If the `web.app` → `config` import chain reaches torch or
+   chromadb, the container dies on boot while `make web` stays green, because
+   `make web` runs against the full dev env. Verify with a throwaway venv built
+   from `requirements-web.txt` alone (see `DEPLOY.md`).
+2. **The `fly.toml` cost invariant.** Fly has no free tier but doesn't collect
+   invoices under $5/mo. `[[vm]]` is pinned to `shared-cpu-1x`/`256mb`
+   (~$2.02/mo always-on) to stay under it; the `fly launch` default of 1GB is
+   $5.92/mo and gets billed in full. Never attach a volume/Postgres/Redis —
+   those bill regardless of machine state.
+
+`make deploy` runs `rerender-all` first because reports live in the image and a
+stale `data/reports/` would ship a stale site.
 
 ## Generation model & agent
 

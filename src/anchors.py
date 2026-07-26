@@ -49,6 +49,39 @@ ANCHOR_VOCABULARY = {
 }
 
 
+# Human-readable label per anchor, for CLI tables and report prose.
+SECTION_NAMES = {
+    "item1_business": "Business (1)",
+    "item1a_risk": "Risk Factors (1A)",
+    "item1b_unresolved": "Unresolved Comments (1B)",
+    "item1c_cybersecurity": "Cybersecurity (1C)",
+    "item2_properties": "Properties (2)",
+    "item3_legal": "Legal Proceedings (3)",
+    "item4_safety": "Mine Safety (4)",
+    "item5_market": "Market (5)",
+    "item6_reserved": "Reserved (6)",
+    "item7_mdna": "MD&A (7)",
+    "item7a_market_risk": "Market Risk (7A)",
+    "item8_financials": "Financials (8)",
+    "item9_changes": "Changes in Accountants (9)",
+    "item9a_controls": "Controls (9A)",
+    "item9b_other": "Other Information (9B)",
+    "item9c_foreign": "Foreign Jurisdictions (9C)",
+    "item10_governance": "Governance (10)",
+    "item11_compensation": "Compensation (11)",
+    "item12_equity": "Equity (12)",
+    "item13_relationships": "Relationships (13)",
+    "item14_accountant": "Accountant Fees (14)",
+    "item15_exhibits": "Exhibits (15)",
+    "item16_summary": "Summary (16)",
+    "income_statement": "Income Statement",
+    "balance_sheet": "Balance Sheet",
+    "cash_flow": "Cash Flow",
+    "stockholders_equity": "Stockholders' Equity",
+    "notes_to_financials": "Notes to Financials",
+}
+
+
 # Mapping from normalized item-header text to prose anchor.
 # Order matters: longer, more specific headers are checked first.
 ITEM_HEADER_PATTERNS = [
@@ -156,6 +189,7 @@ XBRL_TAG_TO_ANCHOR = {
     "StockholdersEquity": "balance_sheet",
     "CashAndCashEquivalentsAtCarryingValue": "balance_sheet",
     "AccountsReceivableNet": "balance_sheet",
+    "AccountsReceivableNetCurrent": "balance_sheet",
     "InventoryNet": "balance_sheet",
     "PropertyPlantAndEquipmentNet": "balance_sheet",
     "LongTermDebtNoncurrent": "balance_sheet",
@@ -165,6 +199,7 @@ XBRL_TAG_TO_ANCHOR = {
     "NetCashProvidedByUsedInFinancingActivities": "cash_flow",
     "PaymentsToAcquirePropertyPlantAndEquipment": "cash_flow",
     "RepurchaseOfCommonStock": "cash_flow",
+    "PaymentsForRepurchaseOfCommonStock": "cash_flow",
     "PaymentsOfDividends": "cash_flow",
     "PaymentsOfDividendsCommonStock": "cash_flow",
 }

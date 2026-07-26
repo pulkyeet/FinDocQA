@@ -86,8 +86,73 @@
 - [x] `requirements.txt` — added fastapi, uvicorn, jinja2
 - [x] `Makefile` — `make web` target verified (`cd src && uvicorn web.app:app --reload --port 8000`)
 - [x] `fly.toml` — Fly.io deployment config (internal_port 8000, Paketo buildpacks, SJC region)
+      — *superseded by deploy prep below: Dockerfile build, not buildpacks*
 - [x] `.dockerignore` — excludes raw/chunks/chroma/eval/diffs, keeps reports/
 - [x] All 121 tests pass
+
+### Phase 06 — Report v2: the readability layer  ✅
+The phase-04/05 report was a *diff viewer* (per-paragraph change cards, materiality
+pills, per-change churn). Phase 06 recomposes it into a **~15-minute analyst report**
+— the diff becomes the evidence layer beneath prose, not the product itself.
+
+- [x] `delta/narrate.py` — **stage 8**: one LLM call per chapter over that chapter's
+      material/notable interpretations → 600–900 words of analyst prose
+      (`SYSTEM_PROSE`, not `SYSTEM_JSON` — sending the JSON system prompt to the
+      narrative stage visibly degrades it)
+- [x] Citation plumbing — narrator cites short evidence labels (`E1`, `E7`);
+      `resolve_citations()` renumbers by first appearance, renders `<sup>` links into
+      the chapter's evidence drawer, and **silently drops any label not in the pool**
+      (same fail-safe as an unvalidated quote). HTML-escape happens *before* citation
+      substitution so model-emitted markup can never become live HTML.
+- [x] `config.py:REPORT_CHAPTERS` — chapters are **data, not template logic**; re-cutting
+      the report is a config edit. Exec Summary → Financial Performance → The Business →
+      Risk Landscape → MD&A → Legal & Regulatory → What the Engine Found → Methodology
+- [x] `xbrl_delta.py:build_metric_series()` — year-keyed series (every year's absolute
+      value + YoY % in brackets) driving the three financial tables; distinct from the
+      year-*pair* keyed `compute_yoy_deltas()` that feeds the numeric guard
+- [x] Dropped deliberately: per-paragraph change cards, materiality pills, per-change
+      churn, and the ~15 thin anchors carrying no surfaced change (anchors absent from
+      every chapter are dropped, not rendered empty)
+- [x] Churn survives at **section level only** + `CHURN_MIN_RECORDS = 8` (a one-paragraph
+      section scores a meaningless 1.00 and crowds out real signal)
+- [x] `FINANCIALS_NARRATIVE_ANCHORS` — folds material Item 8 changes into Financial
+      Performance; A/B via `rerender.py --no-item8 --suffix _variantB`
+- [x] Read time = narrative words ÷ `WORDS_PER_MINUTE` (220); length knob is
+      `NARRATIVE_MIN_WORDS` / `NARRATIVE_MAX_WORDS`
+- [x] `rerender.py` — rebuild HTML from persisted stage-7 + stage-8 output with **no LLM
+      calls** (`make rerender` / `rerender-all`); `make narrate` recomposes prose only
+- [x] `_narrative.json` persisted per ticker alongside `_interpretations.jsonl`, so a
+      template change never costs an LLM call
+- [x] `web/templates/report_index.html` → `data/reports/index.html`
+- [x] `tests/test_narrate.py` + `tests/test_interpret.py` added
+
+### Deploy prep (Fly.io, static)  ✅
+See `DEPLOY.md` for the full procedure and `working_knowledge.md` for the gotchas.
+
+- [x] `Dockerfile` — slim `python:3.11-slim`, installs `requirements-web.txt`, bakes
+      `src/` + pre-built reports. **No torch/chromadb** (~200MB image, no runtime
+      secrets, no cold-start model download). Replaces the phase-05 Paketo buildpack.
+- [x] `requirements-web.txt` — fastapi, uvicorn, jinja2, python-dotenv only. Viable
+      because `config.py` imports just `os` + `dotenv`.
+- [x] `fly.toml` — `[[vm]]` pinned `shared-cpu-1x`/`256mb`/1cpu; `min_machines_running = 1`
+      with `auto_stop_machines = false` (always-on); app renamed `delta-findocqa`
+      (`delta` is taken in Fly's global namespace)
+- [x] **Cost invariant documented.** Fly has no free tier but doesn't collect invoices
+      under $5/mo. 256mb always-on ≈ $2.02/mo → not collected. The `fly launch` default
+      of 1GB is $5.92/mo and would be billed in full. No volume/Postgres ever — those
+      bill regardless of machine state. This is why the `[[vm]]` block is not optional.
+- [x] `.dockerignore` — also drops `src/data/reports/*_variant*.html`; `/reports` is a
+      public mount, so A/B artifacts would otherwise be fetchable
+- [x] `make deploy` — runs `rerender-all` then `flyctl deploy`; reports live in the image,
+      so a stale `data/reports/` would ship a stale site
+- [x] **Verified the deployed dep set boots** — clean venv from `requirements-web.txt`
+      alone, running the container's exact command (`uvicorn web.app:app` from `src/`,
+      no `PYTHONPATH`). All routes green: `/` 200, `/report/AAPL` 200 (204KB),
+      `/report/NVDA` 200, `/report/BOGUS` 404, `/static/*` 200. Docker Desktop's WSL
+      integration is off, but Fly builds remotely so this is the substitute check.
+- [x] All 180 tests pass (9 modules)
+- [ ] `flyctl` install + `fly auth login` (interactive, user-side)
+- [ ] First `flyctl deploy` — blocked on TSLA finishing stage 7 (6 of 7 reports built)
 
 ### Numeric-blindness gap — RESOLVED ✅
 The embedding similarity classifier was blind to numeric value changes: a paragraph

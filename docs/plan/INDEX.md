@@ -8,6 +8,8 @@
 | 03 | XBRL + interpretation | ✅ complete | 02 | — |
 | 04 | Report render | ✅ complete | 03 | — |
 | 05 | Web app + deploy | ✅ complete | 04 | — |
+| 06 | Report v2 (readability layer) | ✅ complete | 05 | — |
+| — | Deploy prep (Fly.io static) | ✅ complete | 06 | — |
 
 ## Dependency notes
 
@@ -18,6 +20,11 @@
 - Phase 03 added the XBRL numeric backbone + OpenRouter-powered LLM interpretation + trend synthesis. 63/79 (80%) validation rate with batched prompts.
 - Phase 04 renders the report to DESIGN.md spec (Jinja2 + CSS tokens).
 - Phase 05 wraps the report in a FastAPI web app (hero/query + report pages) and deploys.
+- Phase 06 (added after 05) recomposes the report from a diff viewer into a ~15-minute
+  chaptered analyst read — stage 8 `narrate.py`, evidence drawers, citation resolution.
+  Phases 04/05 shipped the evidence layer; 06 shipped the thing a human actually reads.
+- Deploy prep hardened phase 05's config into a shippable, effectively-free Fly.io
+  deploy (slim image, cost invariant, `make deploy`). See `DEPLOY.md`.
 
 ## What changed from the original plan
 
@@ -28,6 +35,12 @@
 | Labeled sample | 50 pairs from 1 section | 48 pairs from 5 sections × 2 year pairs |
 | Thresholds | expected to shift significantly | validated defaults (0.95/0.81/0.60) |
 | Chunker hardening | regex tweaks | keyword+table heading detection, anchor fallback, merge guard |
+| Report shape | per-paragraph change cards + materiality pills | chaptered analyst prose (stage 8) + per-chapter evidence drawers; cards and pills dropped |
+| Trend synthesis | per-section synthesis (phase 03) | superseded by per-chapter narrative composition (`narrate.py`) |
+| Fly build | Paketo buildpack | `Dockerfile` + `requirements-web.txt` (no torch → ~200MB image) |
+| Machine sizing | unspecified | `[[vm]]` pinned `shared-cpu-1x`/`256mb`, always-on — keeps the bill under Fly's $5 non-collection threshold |
+| `/api/trigger` | background pipeline run | inert (`501`); live generation dropped, not deferred |
+| Deploy cost | ~$5/mo | ~$2/mo of usage → under Fly's collection threshold → effectively $0 |
 
 ## Resolved gap: numeric-blindness ✅
 
@@ -44,9 +57,15 @@ audited financial-section tag moved but text didn't surface it. Orthogonal to th
 tuned thresholds; every upgrade carries an auditable `numeric_guard` reason. See
 `tracker.md` for details and verification.
 
-## What "done" looks like (end of phase 05)
+## What "done" looks like (current)
 
-`python delta.py AAPL --years 5` produces a full change report. A user visits
-the web app, enters a ticker, and views the rendered report with churn scores,
-material changes, side-by-side quotes, XBRL deltas, and trend narratives — all
-traceable to deterministic diff records.
+`python delta.py AAPL --years 5` produces a full change report. A user visits the
+deployed app, picks a ticker, and reads a ~15-minute chaptered analyst report —
+narrative prose with an evidence drawer per chapter, financial tables carrying
+every year's value and YoY %, and section churn — every claim traceable to a
+deterministic diff record with verbatim quotes from both years.
+
+The app is deployed to Fly.io serving pre-built reports from a slim image, at
+~$2/mo of usage which falls under Fly's $5 non-collection threshold. There is no
+live generation in production by design; adding a ticker is a local pipeline run
+plus `make deploy`.

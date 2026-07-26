@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Delta — Reports{% endblock %}
+{% block content %}
+<div class="hero-band">
+  <img src="/static/img/delta.png?v={{ static_v('img/delta.png') }}" alt="" class="hero-mark">
+  <h1 class="display-xl">Delta Reports</h1>
+  <p class="body-lg hero-band-sub">
+    Five-year filing change intelligence for the Magnificent 7.
+  </p>
+</div>
+
+<div class="content-band">
+  <div class="index-grid">
+    {% for t in tickers %}
+    <a href="{{ t }}.html" class="card-feature ticker-card">
+      <div class="tc-sym">{{ t }}</div>
+      <div class="tc-name">{{ names.get(t, t) }}</div>
+      <div class="tc-cta">View report &rarr;</div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

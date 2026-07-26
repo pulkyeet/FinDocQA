@@ -63,6 +63,14 @@ The `Makefile` lives at the repo root and `cd src` for you.
 - **Python**: 3.11.9 at `~/.pyenv/versions/3.11.9/`. Deps in `requirements.txt`
   (v1: chromadb, sentence-transformers, beautifulsoup4, lxml, python-dotenv,
   duckduckgo-search, streamlit, pandas, torch; v2 adds: fastapi, uvicorn, jinja2, requests).
+- **Two requirements files.** `requirements.txt` is the dev/pipeline set.
+  `requirements-web.txt` is the **deployed runtime set** — fastapi, uvicorn,
+  jinja2, python-dotenv, nothing else. Anything the `web` import chain touches
+  must be satisfiable from that short list. See the deploy section below.
+- **Docker is not usable from this WSL distro** (Docker Desktop's WSL
+  integration is off). This doesn't block deployment — Fly builds remotely — but
+  it means you cannot smoke-test the image locally. Use the venv trick in the
+  deploy section instead.
 - **Models cached at**: `~/.cache/huggingface/` (HuggingFace download cache;
   first run downloads, subsequent runs are fast).
 - **HF token**: Set in `src/.env` as `HF_TOKEN=hf_...`. Silences rate-limit warnings
@@ -189,6 +197,48 @@ Tuned on 48-pair labeled sample (5 sections × 2 year pairs from AAPL):
 Held-out (10 pairs): precision=0.300, recall=1.000, F1=0.462.
 High recall is intentional — we'd rather over-flag changes and let the
 LLM classify them as boilerplate than miss real changes.
+
+## Deploy (Fly.io) — gotchas
+
+Full procedure in `DEPLOY.md`. The parts that bite:
+
+- **`make deploy` rerenders first, on purpose.** Reports are baked into the
+  image, so a stale `src/data/reports/` ships a stale site. `rerender-all` costs
+  no LLM calls, so there is no reason to skip it.
+- **`config.py` must stay import-light.** It needs only `os` + `dotenv` today,
+  and `requirements-web.txt` is sized to that. If anything in the
+  `web.app` → `config` import chain reaches a pipeline dep (torch, chromadb,
+  pandas), **the container dies on boot while `make web` stays green** — because
+  `make web` runs against your full dev env. This is the #1 way to break the
+  deploy without any test failing.
+- **Verify the deployed dep set without Docker** by building a throwaway venv
+  from `requirements-web.txt` alone and running the container's exact command:
+  ```bash
+  python3 -m venv /tmp/webvenv && /tmp/webvenv/bin/pip install -r requirements-web.txt
+  cd src && env -u PYTHONPATH /tmp/webvenv/bin/python -m uvicorn web.app:app --port 8011
+  ```
+  `env -u PYTHONPATH` matters: the Dockerfile sets no `PYTHONPATH`, and leaving
+  your shell's value in place masks exactly the bug you're looking for. It works
+  in the container because uvicorn inserts `--app-dir` (default `.`) into
+  `sys.path` and `WORKDIR` is `/app/src`.
+- **Cost invariant — don't "tidy" `fly.toml`.** Fly has no free tier but doesn't
+  collect invoices under $5/mo. `[[vm]]` is pinned to `shared-cpu-1x` / `256mb`
+  (~$2.02/mo always-on) to stay under it; the `fly launch` default of 1GB is
+  $5.92/mo and gets billed **in full**. Never attach a volume/Postgres/Redis —
+  those bill regardless of machine state. `min_machines_running = 1` +
+  `auto_stop_machines = false` is deliberate: always-on is free at this size, so
+  scale-to-zero would only add a cold start.
+- **A/B variant reports must not ship.** `app.py` mounts the whole reports dir at
+  `/reports`, so anything there is publicly fetchable. `.dockerignore` drops
+  `src/data/reports/*_variant*.html`, placed *after* the `!src/data/reports/`
+  negation because last match wins.
+- **`index.html` self-corrects.** `rerender.py` scans for existing
+  `{ticker}.html` and rebuilds the index from that set — never hand-edit it, and
+  don't worry about it going stale between pipeline runs.
+- **Fly app names are global.** `fly.toml` uses `delta-findocqa`; plain `delta`
+  is long taken.
+- **No live generation in production.** `/api/trigger` returns `501`; the image
+  has no pipeline deps. Adding a ticker = run the pipeline locally, redeploy.
 
 ## Quick verification commands
 

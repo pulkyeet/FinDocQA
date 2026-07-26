@@ -17,45 +17,18 @@ import json
 import os
 import sys
 
+from anchors import SECTION_NAMES
 from config import TICKERS, DELTA_YEARS_DEFAULT, DELTA_YEARS_MAX
 from fetch import find_n_recent_10ks, fetch_10k_html_for_year, fetch_companyfacts
 from chunk import chunk_sectionaware, _write_chunks
 from delta.align import load_chunks_for_year
 from delta.diff import diff_all_sections, write_diff_records, churn_summary, classification_counts
-from delta.xbrl_delta import load_companyfacts, compute_yoy_deltas
-from delta.report import build_report_data, render_html, render_cli_summary, write_report, write_interpretations, build_report_index
+from delta.xbrl_delta import load_companyfacts, compute_yoy_deltas, build_metric_series
+from delta.report import (
+    build_report_data, render_html, render_cli_summary, write_report,
+    write_interpretations, write_narratives, build_report_index,
+)
 from config import XBRL_DELTA_TAGS, DELTA_REPORTS_DIR
-
-SECTION_NAMES = {
-    "item1_business": "Business (1)",
-    "item1a_risk": "Risk Factors (1A)",
-    "item1b_unresolved": "Unresolved Comments (1B)",
-    "item1c_cybersecurity": "Cybersecurity (1C)",
-    "item2_properties": "Properties (2)",
-    "item3_legal": "Legal Proceedings (3)",
-    "item4_safety": "Mine Safety (4)",
-    "item5_market": "Market (5)",
-    "item6_reserved": "Reserved (6)",
-    "item7_mdna": "MD&A (7)",
-    "item7a_market_risk": "Market Risk (7A)",
-    "item8_financials": "Financials (8)",
-    "item9_changes": "Changes in Accountants (9)",
-    "item9a_controls": "Controls (9A)",
-    "item9b_other": "Other Information (9B)",
-    "item9c_foreign": "Foreign Jurisdictions (9C)",
-    "item10_governance": "Governance (10)",
-    "item11_compensation": "Compensation (11)",
-    "item12_equity": "Equity (12)",
-    "item13_relationships": "Relationships (13)",
-    "item14_accountant": "Accountant Fees (14)",
-    "item15_exhibits": "Exhibits (15)",
-    "item16_summary": "Summary (16)",
-    "income_statement": "Income Statement",
-    "balance_sheet": "Balance Sheet",
-    "cash_flow": "Cash Flow",
-    "stockholders_equity": "Stockholders' Equity",
-    "notes_to_financials": "Notes to Financials",
-}
 
 
 def fetch_ticker(ticker, cik, years):
@@ -121,10 +94,12 @@ def run_delta(ticker, years, no_llm=False):
     try:
         xbrl_data = load_companyfacts(ticker)
         xbrl_deltas = compute_yoy_deltas(xbrl_data, XBRL_DELTA_TAGS, available_fys)
+        metric_series = build_metric_series(xbrl_data, XBRL_DELTA_TAGS, available_fys)
         n_tags = len([k for k, v in xbrl_deltas.items() if v])
         print(f"  {n_tags} tags with YoY deltas across {len(available_fys)} years")
     except FileNotFoundError:
         xbrl_deltas = {}
+        metric_series = {}
         print(f"  [warn] companyfacts missing; numeric guard runs text-only")
 
     print(f"\n[stage 3-5] align + diff...")
@@ -146,8 +121,9 @@ def run_delta(ticker, years, no_llm=False):
     print(churn_summary(ticker, records_by_year, SECTION_NAMES))
 
     if not no_llm:
-        print(f"\n[stage 7-8] LLM interpretation...")
-        from delta.interpret import interpret_ticker, synthesize_trends
+        print(f"\n[stage 7] LLM interpretation...")
+        from delta.interpret import interpret_ticker
+        from delta.narrate import narrate_ticker
 
         interpretations = interpret_ticker(
             ticker, records_by_year, xbrl_deltas, SECTION_NAMES
@@ -158,18 +134,21 @@ def run_delta(ticker, years, no_llm=False):
             for v in interpretations.values()
         )
         print(f"\n  Total: {n_interp} interpretations ({n_valid} validated)")
+        write_interpretations(interpretations, ticker)
 
-        print(f"\n[stage 8] Trend synthesis...")
-        trends = synthesize_trends(ticker, interpretations, SECTION_NAMES, year_pairs)
-        n_trends = len([v for v in trends.values() if v])
-        print(f"  {n_trends} trend narratives generated")
+        print(f"\n[stage 8] Narrative composition...")
+        chapters, exec_summary, financial_narrative = narrate_ticker(
+            ticker, entity_name, interpretations, metric_series, available_fys,
+        )
+        write_narratives(chapters, exec_summary, financial_narrative, ticker)
 
         print(f"\n[stage 9] Report rendering...")
         report_data = build_report_data(
-            ticker, records_by_year, interpretations, trends,
-            xbrl_deltas, entity_name,
+            ticker, records_by_year, interpretations, xbrl_deltas,
+            metric_series=metric_series, chapters=chapters,
+            exec_summary=exec_summary, financial_narrative=financial_narrative,
+            entity_name=entity_name,
         )
-        write_interpretations(interpretations, trends, ticker, year_pairs)
 
         html = render_html(report_data)
         report_path = write_report(ticker, html)

@@ -139,7 +139,7 @@ FinDocQA v1 answers questions about a single fiscal year. **Delta** extends the 
 fetch (5 yrs) → parse + anchor → align sections (anchor equality)
     → align paragraphs (embeddings) → deterministic diff classification
     → XBRL numeric deltas joined → LLM interpretation (changed pairs only)
-    → trend synthesis → report render
+    → narrative composition (chapters) → report render
 ```
 
 **Stage 1: Fetch.** EDGAR submissions API lists full filing history; extend the throttled fetcher to loop over the last N 10-K accession numbers. Companyfacts (already cached) contains all historical XBRL values.
@@ -168,9 +168,13 @@ Output: a machine-readable **diff record** per change. Churn score per section p
 
 **Stage 7: LLM interpretation.** Changed records (only changed) go to the generation model with a strict JSON-output prompt. The model classifies each change (`added/removed/expanded/softened/strengthened/reworded`), assigns materiality (`boilerplate/notable/material`), writes a one-line summary, and for notable+ changes, one line on why it matters with verbatim quotes from each year.
 
-**Stage 8: Trend synthesis.** One synthesis call per section produces the longitudinal narrative across all year-pairs.
+**Stage 8: Narrative composition (`delta/narrate.py`).** The readability layer, and the reason the report is a product rather than a diff dump. One LLM call **per chapter** (not per section) over that chapter's material/notable interpretations produces 600–900 words of analyst prose. Uses `SYSTEM_PROSE`; sending stage 7's `SYSTEM_JSON` here visibly degrades output.
 
-**Stage 9: Report render.** Jinja2 HTML report per ticker + CLI summary. Churn scores headline the report.
+Traceability survives the prose via short evidence labels (`E1`, `E2`…) the narrator cites inline as `[E7]`. `resolve_citations()` renumbers them by first appearance, renders `<sup>` links into the chapter's evidence drawer, and **silently drops any label not in the pool** — the same fail-safe as an unvalidated quote. HTML-escaping happens *before* citation substitution, so model-emitted markup can never become live HTML.
+
+*Supersedes the original per-section trend synthesis*, which produced correct but unreadable output: a longitudinal paragraph per section, ~27 of them, with no editorial hierarchy. Chapters are **data, not template logic** (`config.py:REPORT_CHAPTERS`), so re-cutting the report is a config edit.
+
+**Stage 9: Report render.** Jinja2 HTML report per ticker + CLI summary. Chapters lead; churn survives at section level only (`CHURN_MIN_RECORDS = 8` hides stubs that would score a meaningless 1.00). Stage-7 and stage-8 output are both persisted (`_interpretations.jsonl`, `_narrative.json`) so `rerender.py` rebuilds the HTML with zero LLM calls.
 
 ### Why the LLM-explains-but-never-detects split matters
 
@@ -244,15 +248,24 @@ Generation model: the existing frozen opencode model. Per-ticker budget for a fu
 
 **Two pages:**
 1. **Index/hero page (`/`):** Sells the project (Voltagent-inspired dark canvas, electric-green accent, Inter + SF Mono, hairline cards). Contains a ticker input section (text input + years selector, default 5, max 5).
-2. **Report page (`/report/{ticker}`):** Renders the Delta change report — churn scores, material changes with side-by-side quotes, XBRL deltas, trend narratives.
+2. **Report page (`/report/{ticker}`):** Renders the Delta change report as chaptered analyst prose with an evidence drawer per chapter — financial tables (every year's value + YoY %), section churn, and change statistics. Per-paragraph change cards were deliberately dropped in Report v2: the deliverable is the report a human reads, and the diff is the evidence layer beneath it.
 
-**Interaction model:** Submit ticker → if pre-built report exists, serve it; if not, trigger batch pipeline (background) and show "generating..." state.
+**Interaction model:** Submit ticker → serve the pre-built report if it exists, else a "not published" page. There is no live generation path — see Deployment.
 
 ### Deployment
 
-**Tier 0 (static reports, $0):** GitHub Actions runs the batch monthly, commits `data/reports/*.html`, GitHub Pages serves them. First milestone.
+**SHIPPED: Tier 1 static (Fly.io, effectively $0/mo).** FastAPI serves pre-built reports from a slim image; the pipeline runs offline and reports are baked in at build time. Details in `DEPLOY.md`.
 
-**Tier 1 (small live service, ~$5/mo):** FastAPI app serves pre-built reports + `/api/trigger/{ticker}` endpoint for fresh runs on the 7 cached tickers. Fly.io or Railway. **Target end state.**
+Two decisions here supersede the original plan below:
+
+- **`/api/trigger` is inert (returns `501`).** Live generation was dropped, not deferred-with-intent. It would require the full pipeline image (torch, chromadb), runtime secrets, a volume, and an async job runner — and would break the cost invariant. The endpoint remains only to report readiness. Adding a ticker means running the pipeline locally and redeploying.
+- **Cost invariant: Fly has no free tier but does not collect invoices under $5/mo.** `fly.toml` pins `[[vm]]` to `shared-cpu-1x`/`256mb` (~$2.02/mo always-on) to stay under that line; the `fly launch` default of 1GB is $5.92/mo and would be billed in full. Never attach a volume, Postgres, or Redis — those bill regardless of machine state. This is what makes the original "~$5/mo" estimate come out at ~$0 in practice.
+
+*Original tiering, retained for context:*
+
+**Tier 0 (static reports, $0):** GitHub Actions runs the batch monthly, commits `data/reports/*.html`, GitHub Pages serves them. — *Not pursued; Fly + baked reports achieves the same cost with the real routes. Note that a CI-based deploy would ship an empty reports directory, since `src/data/` is gitignored.*
+
+**Tier 1 (small live service, ~$5/mo):** FastAPI app serves pre-built reports + `/api/trigger/{ticker}` endpoint for fresh runs on the 7 cached tickers. Fly.io or Railway. — *Shipped, minus the trigger.*
 
 **Tier 2 (any-ticker, ~$5-15/mo):** Deferred. Accept arbitrary tickers with job queue + progress page.
 

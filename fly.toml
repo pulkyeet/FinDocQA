@@ -1,4 +1,8 @@
-app = "findocqa-delta"
+# Delta — static report server on Fly.io.
+#
+# App names are a global namespace on Fly; "delta" is long taken. Change this if
+# `fly launch` reports the name is unavailable.
+app = "delta-findocqa"
 primary_region = "sjc"
 
 # Static deploy: build the slim web image from Dockerfile (no buildpack, no
@@ -9,9 +13,23 @@ primary_region = "sjc"
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = true
+
+  # Always-on, deliberately. Fly does not collect invoices under $5/mo, and one
+  # always-running shared-cpu-1x/256mb machine is ~$2.02/mo — so keeping the
+  # machine up costs nothing *and* avoids the multi-second cold start that
+  # scale-to-zero would put in front of the first visitor.
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
+
+# Pinning the VM is what keeps this deploy free: `fly launch` otherwise defaults
+# to 1GB RAM ($5.92/mo), which crosses the $5 collection threshold and bills the
+# full amount. 256mb is ample — the runtime is uvicorn + FastAPI + Jinja2
+# serving pre-built HTML, with none of the pipeline's torch/chromadb weight.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1
 
 [env]
   PORT = "8000"

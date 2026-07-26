@@ -91,13 +91,94 @@ XBRL_DELTA_TAGS = [
     "ResearchAndDevelopmentExpense", "CostOfGoodsAndServicesSold",
     "GrossProfit", "OperatingIncomeLoss", "NetIncomeLoss",
     "IncomeLossFromContinuingOperationsBeforeIncomeTaxes",
+    "IncomeTaxExpenseBenefit",
     "SellingGeneralAndAdministrativeExpense",
+    "EarningsPerShareBasic", "EarningsPerShareDiluted",
     "NetCashProvidedByUsedInOperatingActivities",
     "NetCashProvidedByUsedInInvestingActivities",
     "NetCashProvidedByUsedInFinancingActivities",
+    "PaymentsToAcquirePropertyPlantAndEquipment",
+    "PaymentsForRepurchaseOfCommonStock", "PaymentsOfDividends",
     "Assets", "Liabilities", "StockholdersEquity",
     "LongTermDebtNoncurrent", "CashAndCashEquivalentsAtCarryingValue",
+    "AccountsReceivableNetCurrent", "InventoryNet",
+    "PropertyPlantAndEquipmentNet",
 ]
+
+# ── Report composition (v2 narrative report) ────────────────────────────
+#
+# The report is an essay, not a diff dump: each chapter is one LLM-composed
+# narrative built from the material/notable interpretations of its anchors.
+# Anchors absent from every chapter are deliberately dropped from the report —
+# they carry almost no surfaced change (Properties, Exhibits, Compensation).
+REPORT_CHAPTERS = [
+    {
+        "id": "business",
+        "title": "The Business",
+        "subtitle": "Strategy, segments, and geographic footprint",
+        "anchors": ["item1_business", "item5_market"],
+    },
+    {
+        "id": "risk",
+        "title": "Risk Landscape",
+        "subtitle": "What management newly fears, and what it stopped fearing",
+        "anchors": ["item1a_risk", "item7a_market_risk", "item1c_cybersecurity"],
+    },
+    {
+        "id": "mdna",
+        "title": "Management's Discussion",
+        "subtitle": "How management explains its own numbers",
+        "anchors": ["item7_mdna"],
+    },
+    {
+        "id": "legal",
+        "title": "Legal & Regulatory",
+        "subtitle": "Proceedings, settlements, and regulatory exposure",
+        "anchors": ["item3_legal", "item9b_other"],
+    },
+]
+
+# Anchors whose *material* changes are folded into the Financial Performance
+# chapter as accounting-policy / restatement notes. Variant B sets this empty.
+FINANCIALS_NARRATIVE_ANCHORS = ["item8_financials", "income_statement",
+                                "cash_flow", "balance_sheet"]
+
+# XBRL statement tables: (group title, [tags in display order]).
+XBRL_STATEMENT_GROUPS = [
+    ("Income Statement", [
+        "RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
+        "CostOfGoodsAndServicesSold", "GrossProfit",
+        "ResearchAndDevelopmentExpense", "SellingGeneralAndAdministrativeExpense",
+        "OperatingIncomeLoss",
+        "IncomeLossFromContinuingOperationsBeforeIncomeTaxes",
+        "IncomeTaxExpenseBenefit", "NetIncomeLoss",
+        "EarningsPerShareBasic", "EarningsPerShareDiluted",
+    ]),
+    ("Cash Flow", [
+        "NetCashProvidedByUsedInOperatingActivities",
+        "NetCashProvidedByUsedInInvestingActivities",
+        "NetCashProvidedByUsedInFinancingActivities",
+        "PaymentsToAcquirePropertyPlantAndEquipment",
+        "PaymentsForRepurchaseOfCommonStock", "PaymentsOfDividends",
+    ]),
+    ("Balance Sheet", [
+        "Assets", "Liabilities", "StockholdersEquity",
+        "CashAndCashEquivalentsAtCarryingValue",
+        "AccountsReceivableNetCurrent", "InventoryNet",
+        "PropertyPlantAndEquipmentNet", "LongTermDebtNoncurrent",
+    ]),
+]
+
+# Churn over a handful of paragraphs is meaningless — a stub section where the
+# anchor matched a header but almost no body text scores 1.00 and crowds the
+# real signal out of the churn table.
+CHURN_MIN_RECORDS = 8
+
+# Narrative composition
+NARRATIVE_MIN_WORDS = 600
+NARRATIVE_MAX_WORDS = 900
+NARRATIVE_MAX_EVIDENCE = 40   # interpretations fed to one chapter call
+WORDS_PER_MINUTE = 220        # for the read-time estimate
 
 
 def sanitize_prompt(text: str) -> str:

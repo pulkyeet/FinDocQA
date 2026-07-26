@@ -1,5 +1,25 @@
 # Phase 05 — Web App + Deploy
 
+> **This is the original plan, retained as the execution record. Four things
+> changed in what shipped — see `DEPLOY.md` for the current procedure:**
+>
+> 1. **Build:** `Dockerfile` + `requirements-web.txt`, not the Paketo buildpack in
+>    the `fly.toml` snippet below. No torch/chromadb in the image (~200MB).
+> 2. **Machine:** `fly.toml` pins `[[vm]]` to `shared-cpu-1x`/`256mb` and runs
+>    always-on (`min_machines_running = 1`, `auto_stop_machines = false`). Fly has
+>    no free tier but doesn't collect invoices under $5/mo, and 256mb always-on is
+>    ~$2.02/mo — so this is effectively free *and* has no cold start. The
+>    `fly launch` default of 1GB is $5.92/mo and would be billed in full.
+> 3. **`/api/trigger` is inert (`501`).** The "stretch goal" framing below resolved
+>    to *dropped*, not deferred: live generation needs the full pipeline image,
+>    secrets, a volume, and a job runner, and would break the cost invariant.
+> 4. **Report content:** phase 06 replaced the per-paragraph change cards and
+>    materiality pills described below with chaptered analyst prose (`narrate.py`)
+>    and per-chapter evidence drawers.
+>
+> The static-serving decision recorded in deliverable 5 was the right call and is
+> what shipped.
+
 ## Objective
 Wrap the report in a FastAPI web app with two pages: a hero/query index page (sells the project, accepts ticker input) and a report page (displays the Delta change report). Deploy to Fly.io (Tier 1: ~$5/mo, serves pre-built reports + trigger endpoint for cached tickers).
 
@@ -130,7 +150,7 @@ Already added in phase 04. Verify `make web` runs `uvicorn web.app:app --reload 
 ### 8. Fly.io deployment config
 - `fly.toml` (new):
 ```toml
-app = "findocqa-delta"
+app = "delta"
 primary_region = "sjc"
 
 [build]

@@ -4,6 +4,13 @@ A QA system over SEC 10-K filings with a deterministic eval suite that measures
 and compares chunking, embedding, and reranking strategies. The eval harness is
 the project, not the chatbot.
 
+> **This README covers v1, the eval harness.** The repo also contains **Delta**
+> (`src/delta/`), a five-year YoY 10-K change-intelligence engine built on the
+> same corpus and ingest layer: deterministic diff + LLM interpretation composed
+> into a ~15-minute analyst report, served by a FastAPI app. Detection is
+> deterministic; only interpretation is generative. Start with
+> `delta_master_blueprint.md` for the design and `DEPLOY.md` for the deploy.
+
 ## The thesis
 
 Financial tables are the hardest test for RAG. A single income-statement row
@@ -160,28 +167,46 @@ streamlit run src/dashboard.py
 
 ```
 FinDocQA/
-├── README.md
-├── Makefile                    # make eval / fetch / chunk / embed
-├── tracker.md                  # W1-W4 progress
-├── FinDocQA_PLAN.md            # Design source of truth
-├── .opencode/                  # opencode config
-│   ├── opencode.json           # Model defaults + per-agent overrides
-│   └── agent/chatter.md        # No-tools generation agent
+├── README.md                   # v1 results narrative (this file)
+├── Makefile                    # eval/fetch/chunk/embed · delta/rerender/narrate/web/deploy
+├── tracker.md                  # Progress, v1 W1-W4 + v2 phases 00-06
+├── delta_master_blueprint.md   # v2 design source of truth (wins on conflict)
+├── DESIGN.md                   # UI design system the report renders to
+├── DEPLOY.md                   # Fly.io static deploy + cost invariant
+├── working_knowledge.md        # Session bootstrap: habits + every recurring gotcha
+├── AGENTS.md / CLAUDE.md       # Agent notes
+├── docs/plan/                  # 00-ARCHITECTURE.md + phase-0X execution units
+├── Dockerfile                  # Slim web image (no torch) for the deploy
+├── requirements-web.txt        # Deployed runtime deps only (fastapi/uvicorn/jinja2/dotenv)
+├── fly.toml                    # Fly.io config — see DEPLOY.md before editing [[vm]]
 ├── src/
-│   ├── config.py               # Paths, tickers, model keys
-│   ├── fetch.py                # SEC throttled fetcher
+│   ├── config.py               # Paths, tickers, thresholds, REPORT_CHAPTERS
+│   ├── fetch.py                # SEC throttled fetcher (+ fiscal_year_label)
 │   ├── chunk.py                # 2 strategies (fixedsize, sectionaware)
-│   ├── anchors.py              # Anchor vocabulary
-│   ├── embed.py                # 2×2 Chroma builder
-│   ├── rerank.py               # CrossEncoder reranker
-│   ├── query.py                # 8-config CLI query
-│   ├── run_eval.py             # Full 448-call eval sweep
+│   ├── anchors.py              # Anchor vocabulary — the alignment primitive
+│   ├── delta.py                # v2 CLI / 9-stage orchestration
+│   ├── rerender.py             # Rebuild report HTML from persisted output (no LLM)
+│   ├── delta/                  # v2 pipeline
+│   │   ├── align.py            # Section + paragraph alignment
+│   │   ├── diff.py             # Cosine classification + numeric guard
+│   │   ├── xbrl_delta.py       # YoY deltas + metric series
+│   │   ├── interpret.py        # Stage 7: LLM interpretation + quote validation
+│   │   ├── narrate.py          # Stage 8: chapter prose + citation resolution
+│   │   ├── prompts.py          # Prompt templates (SYSTEM_JSON / SYSTEM_PROSE)
+│   │   └── report.py           # Chapter assembly + Jinja2 render + persistence
+│   ├── web/                    # FastAPI app (serves pre-built reports)
+│   │   ├── app.py              # App factory
+│   │   ├── routes.py           # / · /report/{ticker} · /api/*
+│   │   ├── templates/          # base · index · report · report_index · not_found
+│   │   └── static/             # tokens.css (DESIGN.md) + delta.png
+│   ├── embed.py                # v1 2×2 Chroma builder
+│   ├── rerank.py               # v1 CrossEncoder reranker
+│   ├── query.py                # v1 8-config CLI query
+│   ├── run_eval.py             # v1 448-call eval sweep
 │   ├── scoring.py              # Metrics (numeric, retrieval, routing)
-│   ├── web_search.py           # DuckDuckGo fallback
-│   ├── dashboard.py            # Streamlit comparison view
-│   └── eval/
-│       ├── xbrl_autogen.py     # 20 numerical auto-gen questions
-│       ├── hand_drafted.py     # 36 hand-labeled questions
-│       └── build_questions.py  # Combines → questions.jsonl
-└── src/data/                   # gitignored: raw, chunks, chroma, eval
+│   ├── web_search.py           # v1 DuckDuckGo fallback
+│   ├── dashboard.py            # v1 Streamlit comparison view
+│   └── eval/                   # Question generation (20 auto + 36 hand-drafted)
+├── tests/                      # 9 modules, 180 tests
+└── src/data/                   # gitignored: raw, chunks, chroma, eval, diffs, reports
 ```

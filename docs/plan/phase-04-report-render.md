@@ -1,5 +1,13 @@
 # Phase 04 — Report Render
 
+> **Superseded in part by phase 06 (Report v2).** This phase built the evidence
+> layer — per-paragraph change cards, materiality pills, per-change churn, trend
+> narratives per section. Phase 06 replaced that surface with chaptered analyst
+> prose (`delta/narrate.py`) plus a per-chapter evidence drawer; the cards, pills,
+> and per-change churn were deliberately dropped. The CSS token layer, `base.html`,
+> and `report.py`'s assembly/persistence split all still stand. Tier 0
+> (Actions + Pages) was not pursued — see `DEPLOY.md`.
+
 ## Objective
 Render the Delta change report as HTML (Jinja2) styled to DESIGN.md, plus the CLI summary. Build the CSS token layer from DESIGN.md's design system. Run the batch job for all 7 tickers. Set up Tier 0 deployment (static HTML via GitHub Actions + Pages).
 

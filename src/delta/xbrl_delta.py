@@ -92,6 +92,39 @@ def compute_yoy_deltas(companyfacts: dict, tags: list[str], year_range: list[str
     return result
 
 
+def build_metric_series(companyfacts: dict, tags: list[str], year_range: list[str]) -> dict:
+    """Absolute value per fiscal year for each tag, with YoY % vs the prior year.
+
+    Unlike compute_yoy_deltas (which is keyed by year *pair* and drives the
+    numeric guard), this is keyed by year and drives the report's financial
+    tables: every year's number is shown, with its change in brackets.
+
+    Returns {tag: {fy: {"value": float|None, "pct": float|None}}}.
+    Tags with no value in any year are omitted.
+    """
+    sorted_years = sorted(year_range)
+    series = {}
+    for tag in tags:
+        values = get_xbrl_values(companyfacts, tag)
+        by_year = {}
+        prev = None
+        found_any = False
+        for fy in sorted_years:
+            val = fiscal_year_value(values, fy)
+            if val is not None:
+                found_any = True
+            pct = None
+            if val is not None and prev is not None and abs(prev) > 0:
+                pct = round((val - prev) / abs(prev) * 100, 2)
+            by_year[fy] = {"value": val, "pct": pct}
+            # Only carry a real value forward, so a one-year gap doesn't
+            # silently compare FY2025 against FY2023 as if it were YoY.
+            prev = val if val is not None else None
+        if found_any:
+            series[tag] = by_year
+    return series
+
+
 def deltas_for_section(xbrl_deltas: dict, anchor: str) -> dict:
     """Filter XBRL deltas to tags relevant to a section anchor."""
     relevant_tags = [tag for tag, a in XBRL_TAG_TO_ANCHOR.items() if a == anchor]

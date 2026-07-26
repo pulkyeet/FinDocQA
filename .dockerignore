@@ -20,6 +20,12 @@ src/data/diffs/
 # Keep pre-built reports for serving
 !src/data/reports/
 
+# ...except the A/B variants. These are local analysis artifacts (rerender.py
+# --no-item8 --suffix _variantB); app.py mounts the whole reports dir at
+# /reports, so anything shipped here is publicly fetchable. Last match wins in
+# .dockerignore, so this line overrides the negation above.
+src/data/reports/*_variant*.html
+
 # Dev-only requirements (torch etc.) — the image installs requirements-web.txt
 requirements.txt
 
