@@ -292,7 +292,9 @@ def narrate_ticker(ticker: str, entity: str, interpretations: dict,
     if financials_anchors is None:
         financials_anchors = FINANCIALS_NARRATIVE_ANCHORS
 
-    year_range = f"{years[0]} to {years[-1]}" if years else ""
+    # State the count explicitly: GOOGL (3 years) and META (2) have shorter CIK
+    # histories than the 5-year default, and the model otherwise assumed five.
+    year_range = f"{years[0]} to {years[-1]} ({len(years)} fiscal years)" if years else ""
 
     # Headline metrics ground every chapter; the financial chapter gets the lot.
     headline_tags = ["RevenueFromContractWithCustomerExcludingAssessedTax",

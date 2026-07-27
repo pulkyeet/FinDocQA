@@ -73,7 +73,7 @@ CLASSIFICATION_LABELS = {
 def _fmt_money(v, tag=None) -> str:
     """Format a financial value compactly ($391.0B, $1.2M, -$4.3B, $6.13)."""
     if v is None:
-        return "—"
+        return "–"
     v = float(v)
     if tag in _PER_SHARE_TAGS:
         return f"${v:,.2f}"

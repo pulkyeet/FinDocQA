@@ -15,7 +15,6 @@
       <span class="brand-word">Delta</span>
     </a>
     <div class="nav-right">
-      <a href="/" class="nav-link">All reports</a>
       {% block nav_extra %}{% endblock %}
     </div>
   </nav>
@@ -24,8 +23,9 @@
 
   <footer class="footer">
     <img src="/static/img/delta.png?v={{ static_v('img/delta.png') }}" alt="" class="footer-mark">
-    <div>Delta — Filing Change Intelligence</div>
+    <div>Delta · Filing Change Intelligence</div>
     <span class="caption">Detection is deterministic. Interpretation is generative. Every claim traces to a diff record.</span>
+    <div class="caption footer-credit">Made with 💙 by <a href="https://pulkyeet.netlify.app/" target="_blank" rel="noopener">Pulkit Singh</a></div>
   </footer>
 
   {% block scripts %}{% endblock %}

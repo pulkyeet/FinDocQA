@@ -1,4 +1,4 @@
-/* FinDocQA Delta — DESIGN.md design system as CSS custom properties */
+/* FinDocQA Delta: DESIGN.md design system as CSS custom properties */
 
 :root {
   /* ── Colors ─────────────────────────────────────────────── */
@@ -186,6 +186,9 @@ body {
   font-size: var(--text-body-sm); line-height: 20px;
   border-top: 1px solid var(--color-hairline); text-align: center;
 }
+.footer-credit { margin-top: var(--space-sm); }
+.footer-credit a { color: var(--color-primary-soft); text-decoration: none; }
+.footer-credit a:hover { color: var(--color-primary); }
 
 /* ── Data table ─────────────────────────────────────────────── */
 .data-table { width: 100%; border-collapse: collapse; }
@@ -329,7 +332,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Report v2 — full-product change report
+   Report v2: full-product change report
    ══════════════════════════════════════════════════════════════ */
 html { scroll-behavior: smooth; }
 
@@ -525,7 +528,7 @@ sup.cite a:hover { text-decoration: underline; }
 .fin-title { font-size: 11px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--color-primary); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-md); }
 .fin-title::after { content: ""; flex: 1; height: 1px; background: var(--color-hairline); }
 
-/* A boxed grid, not a borderless list — dense multi-year figures need visible
+/* A boxed grid, not a borderless list: dense multi-year figures need visible
    column structure to scan, unlike the prose tables elsewhere on the page. */
 .fin-table {
   width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0;

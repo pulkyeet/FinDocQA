@@ -1,8 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Delta — Filing Change Intelligence{% endblock %}
+{% block title %}Delta · Filing Change Intelligence{% endblock %}
 {% block head %}
 <style>
+  /* ── Ambient layer: aurora + engineering grid behind the hero ── */
+  .hero-wrap {
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-wrap::before {
+    content: "";
+    position: absolute;
+    top: -220px; left: 50%;
+    width: 980px; height: 640px;
+    transform: translateX(-50%);
+    background: radial-gradient(ellipse at center,
+      rgba(0, 217, 146, 0.16) 0%,
+      rgba(0, 217, 146, 0.06) 42%,
+      transparent 72%);
+    filter: blur(24px);
+    pointer-events: none;
+  }
+  .hero-wrap::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse 72% 78% at 50% 24%, #000 25%, transparent 74%);
+    mask-image: radial-gradient(ellipse 72% 78% at 50% 24%, #000 25%, transparent 74%);
+    pointer-events: none;
+  }
+
   .hero {
+    position: relative;
+    z-index: 1;
     padding: var(--space-5xl) var(--space-3xl);
     text-align: center;
     max-width: 800px;
@@ -21,9 +54,17 @@
     color: var(--color-ink-strong);
     font-size: var(--text-display-xl);
     font-weight: 400;
-    line-height: 1.0;
+    line-height: 1.08;
     letter-spacing: -0.65px;
-    margin-bottom: var(--space-xl);
+    margin-bottom: var(--space-2xl);
+    /* Gradient text paints glyphs from the background, which stops at the
+       padding box — without bottom padding the descenders go unpainted. */
+    padding-bottom: 0.12em;
+    background: linear-gradient(180deg,
+      #ffffff 0%, #f2f2f2 52%, rgba(158, 235, 208, 0.92) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
   .hero p {
     color: var(--color-body);
@@ -104,39 +145,102 @@
     font-size: var(--text-display-lg);
     font-weight: 400;
     letter-spacing: -0.9px;
-    margin-bottom: var(--space-4xl);
+    margin-bottom: var(--space-xl);
   }
-  .how-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-xl);
-    max-width: 1100px;
+  .how-intro {
+    color: var(--color-body);
+    font-size: var(--text-body-md);
+    line-height: 26px;
+    max-width: 680px;
+    margin: 0 auto var(--space-4xl);
+  }
+  /* The pipeline: a spine of light connecting four stage nodes. */
+  .pipe {
+    max-width: 720px;
     margin: 0 auto;
-  }
-  .how-card {
-    background: var(--color-canvas);
-    border: 1px solid var(--color-hairline);
-    border-radius: var(--radius-md);
-    padding: var(--space-2xl);
     text-align: left;
   }
-  .how-card .step-num {
+  .pipe-step {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: var(--space-xl);
+  }
+  .pipe-rail {
+    position: relative;
+    display: flex;
+    justify-content: center;
+  }
+  /* Spine segment: runs from each node down to the next one. */
+  .pipe-rail::before {
+    content: "";
+    position: absolute;
+    top: 40px; bottom: -4px;
+    width: 1px;
+    background: linear-gradient(180deg, rgba(0, 217, 146, 0.45), rgba(0, 217, 146, 0.08));
+  }
+  .pipe-step:last-child .pipe-rail::before { display: none; }
+  .pipe-node {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 217, 146, 0.4);
+    background: var(--color-canvas-soft);
+    box-shadow: 0 0 14px rgba(0, 217, 146, 0.15);
     font-family: var(--font-mono);
     font-size: var(--text-caption);
     color: var(--color-primary);
-    display: block;
-    margin-bottom: var(--space-md);
   }
-  .how-card h3 {
+  .pipe-body { padding-bottom: var(--space-4xl); }
+  .pipe-step:last-child .pipe-body { padding-bottom: 0; }
+  .pipe-body h3 {
     color: var(--color-ink-strong);
     font-size: var(--text-display-sm);
     font-weight: 600;
+    line-height: 36px; /* optically centers the title against the node */
     margin-bottom: var(--space-sm);
   }
-  .how-card p {
+  .pipe-body p {
     color: var(--color-body);
     font-size: var(--text-body-sm);
-    line-height: 20px;
+    line-height: 22px;
+    margin-bottom: var(--space-lg);
+  }
+  /* Terminology chips: definitions pulled out of the prose, scannable. */
+  .pipe-terms {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  .term {
+    display: grid;
+    grid-template-columns: 148px 1fr;
+    gap: var(--space-lg);
+    align-items: baseline;
+    background: var(--color-canvas-soft);
+    border: 1px solid var(--color-hairline);
+    border-left: 2px solid rgba(0, 217, 146, 0.45);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-lg);
+  }
+  .term .t {
+    font-family: var(--font-mono);
+    font-size: var(--text-code);
+    color: var(--color-primary-soft);
+  }
+  .term .d {
+    color: var(--color-mute);
+    font-size: var(--text-caption);
+    line-height: 17px;
+  }
+  .mono-term {
+    font-family: var(--font-mono);
+    color: var(--color-body);
+  }
+  @media (max-width: 560px) {
+    .pipe-step { grid-template-columns: 40px 1fr; gap: var(--space-md); }
+    .term { grid-template-columns: 1fr; gap: var(--space-xxs); }
   }
 
   .why-section {
@@ -163,26 +267,172 @@
     margin-top: var(--space-2xl);
     font-style: italic;
   }
+
+  .harness-section {
+    padding: var(--space-4xl) var(--space-3xl) var(--space-5xl);
+    max-width: 780px;
+    margin: 0 auto;
+  }
+  .harness-section .eyebrow {
+    color: var(--color-mute);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: var(--space-md);
+  }
+  .harness-section h2 {
+    color: var(--color-ink);
+    font-size: var(--text-display-sm);
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: var(--space-lg);
+  }
+  .harness-section > p {
+    color: var(--color-mute);
+    font-size: var(--text-body-sm);
+    line-height: 22px;
+    text-align: center;
+    max-width: 620px;
+    margin: 0 auto var(--space-2xl);
+  }
+  .harness-card {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-canvas-soft);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-md);
+    padding: var(--space-2xl);
+  }
+  .harness-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 15%; right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 217, 146, 0.35), transparent);
+  }
+  .harness-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+  }
+  .harness-stat .n {
+    font-family: var(--font-mono);
+    font-size: var(--text-display-sm);
+    color: var(--color-primary-soft);
+    display: block;
+  }
+  .harness-stat .l {
+    color: var(--color-mute);
+    font-size: var(--text-caption);
+  }
+  .harness-card p {
+    color: var(--color-body);
+    font-size: var(--text-body-sm);
+    line-height: 21px;
+    margin-bottom: var(--space-md);
+  }
+  .harness-card p:last-child { margin-bottom: 0; }
+
+  /* ── Effects: theme-scoped glow and motion ───────────────────── */
+
+  /* The mark breathes: slow float with a soft green halo. */
+  .hero .hero-mark {
+    filter: drop-shadow(0 0 18px rgba(0, 217, 146, 0.35));
+  }
+
+  /* Terminal chip: green prompt + blinking block cursor. */
+  .hero .code-inline-chip {
+    border: 1px solid rgba(0, 217, 146, 0.22);
+    box-shadow: 0 0 20px rgba(0, 217, 146, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .hero .code-inline-chip::after {
+    content: "▋";
+    color: var(--color-primary);
+    margin-left: 3px;
+    animation: cursor-blink 1.1s steps(1) infinite;
+  }
+  @keyframes cursor-blink { 50% { opacity: 0; } }
+
+  /* Dividers become hairlines of light that fade at the edges. */
+  .green-divider-band {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%, rgba(0, 217, 146, 0.55) 50%, transparent 100%);
+    box-shadow: 0 0 18px rgba(0, 217, 146, 0.22);
+  }
+
+  /* Pipeline steps light up as you read them. */
+  .pipe-step:hover .pipe-node {
+    border-color: rgba(0, 217, 146, 0.8);
+    box-shadow: 0 0 20px rgba(0, 217, 146, 0.35);
+  }
+  .pipe-node { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+  .term { transition: border-color 0.2s ease; }
+  .term:hover { border-left-color: var(--color-primary); }
+
+  /* Focus and hover glow on the analyze controls. */
+  .input-group input:focus {
+    box-shadow: 0 0 0 3px rgba(0, 217, 146, 0.14);
+  }
+  .input-form .button-primary {
+    transition: box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .input-form .button-primary:hover {
+    box-shadow: 0 0 24px rgba(0, 217, 146, 0.35);
+  }
+  .available-tickers .ticker-link {
+    transition: color 0.15s ease, text-shadow 0.15s ease;
+  }
+  .available-tickers .ticker-link:hover {
+    text-shadow: 0 0 10px rgba(0, 217, 146, 0.6);
+  }
+
+  /* Scroll reveal: sections drift up as they enter the viewport.
+     Initial hidden state exists only when motion is allowed, so
+     content is never invisible without JS or with reduced motion. */
+  @media (prefers-reduced-motion: no-preference) {
+    .hero .hero-mark { animation: mark-float 7s ease-in-out infinite; }
+    @keyframes mark-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-7px); }
+    }
+    .js-reveal .reveal {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .js-reveal .reveal.in {
+      opacity: 1;
+      transform: none;
+    }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<div class="hero">
-  <img src="/static/img/delta.png?v={{ static_v('img/delta.png') }}" alt="" class="hero-mark">
-  <div class="eyebrow">Filing Change Intelligence</div>
-  <h1>Understand what changed between 10-K filings.</h1>
-  <p>
-    Delta reads five years of SEC filings and writes the report an analyst would —
-    what changed, when, and why it matters, with every claim traced to verbatim
-    text from both years.
-  </p>
-  <span class="code-inline-chip" style="font-size: var(--text-code);">$ python delta.py AAPL --years 5</span>
+<div class="hero-wrap">
+  <div class="hero">
+    <img src="/static/img/delta.png?v={{ static_v('img/delta.png') }}" alt="" class="hero-mark">
+    <div class="eyebrow">Filing Change Intelligence</div>
+    <h1>Understand what changed between 10-K filings.</h1>
+    <p>
+      Delta reads up to five years of SEC filings and writes the report an analyst would:
+      what changed, when, and why it matters, with every claim traced to verbatim
+      text from all years.
+    </p>
+    <span class="code-inline-chip" style="font-size: var(--text-code);">$ python delta.py AAPL --years 5</span>
+  </div>
 </div>
 
 <div class="green-divider-band"></div>
 
-<div class="input-section">
+<div class="input-section reveal">
   <h2>Analyze a ticker</h2>
   <form class="input-form" onsubmit="window.location.href='/report/' + document.getElementById('ticker-input').value.toUpperCase(); return false;">
     <div class="input-group">
@@ -201,42 +451,98 @@
 
 <div class="green-divider-band"></div>
 
-<div class="how-section">
+<div class="how-section reveal">
   <h2>How it works</h2>
-  <div class="how-grid">
-    <div class="how-card">
-      <span class="step-num">01</span>
-      <h3>Deterministic diff</h3>
-      <p>
-        Sections are aligned by anchor equality; paragraphs matched via embedding
-        similarity. Every change is classified (unchanged / minor / major / added / removed)
-        before the LLM ever sees it.
-      </p>
+  <p class="how-intro">
+    A 10-K is 100+ pages, and roughly 95% of it is copied verbatim from the
+    previous year. The signal lives in the 5% that changed, and nobody reads two
+    filings side by side to find it. Delta splits that job in two: deterministic
+    code finds every change, and a language model is allowed only to explain
+    what the code already found.
+  </p>
+
+  <div class="pipe">
+
+    <div class="pipe-step">
+      <div class="pipe-rail"><span class="pipe-node">01</span></div>
+      <div class="pipe-body">
+        <h3>Parse and anchor</h3>
+        <p>
+          Each year's filing is parsed into sections and labelled with an
+          anchor, a stable name that survives the item renumbering and
+          reshuffling filers do between years. Matching anchors give every year
+          a shared coordinate system: Risk Factors in FY2021 is always compared
+          to Risk Factors in FY2025, no matter where either sits in the document.
+        </p>
+        <div class="pipe-terms">
+          <div class="term"><span class="t">anchor</span><span class="d">a fixed section name like <span class="mono-term">item1a_risk</span> or <span class="mono-term">income_statement</span>, assigned at parse time and identical across years</span></div>
+        </div>
+      </div>
     </div>
-    <div class="how-card">
-      <span class="step-num">02</span>
-      <h3>Verified interpretation</h3>
-      <p>
-        Only changed passages reach the model, and only to explain them. Every
-        quote it returns must be a literal substring of the filing — quotes that
-        fail validation are dropped, never rendered.
-      </p>
+
+    <div class="pipe-step">
+      <div class="pipe-rail"><span class="pipe-node">02</span></div>
+      <div class="pipe-body">
+        <h3>Align and classify, deterministically</h3>
+        <p>
+          Within each matched section, paragraphs are embedded and paired
+          across years by cosine similarity. The score classifies every pair as
+          unchanged, minor, or major revision; paragraphs with no counterpart
+          become additions or removals. Thresholds are tuned for high recall:
+          over-flag now, discard later, never miss. No language model is
+          involved anywhere in this stage.
+        </p>
+        <div class="pipe-terms">
+          <div class="term"><span class="t">embedding</span><span class="d">a paragraph converted to a numeric vector, where similar meanings land close together</span></div>
+          <div class="term"><span class="t">cosine similarity</span><span class="d">a 0-to-1 score of how close two vectors point; near 1 means near-identical text</span></div>
+          <div class="term"><span class="t">numeric guard</span><span class="d">re-checks "unchanged" pairs for value-only moves similarity can't see, like revenue going $100M &rarr; $489M in otherwise identical prose</span></div>
+        </div>
+      </div>
     </div>
-    <div class="how-card">
-      <span class="step-num">03</span>
-      <h3>A report, not a diff</h3>
-      <p>
-        The verified changes are composed into chapters that follow the 10-K's own
-        structure — a 15-minute read, with audited XBRL figures for every year and
-        a citation behind every claim.
-      </p>
+
+    <div class="pipe-step">
+      <div class="pipe-rail"><span class="pipe-node">03</span></div>
+      <div class="pipe-body">
+        <h3>Interpret, then verify every quote</h3>
+        <p>
+          Only flagged pairs reach the language model, and only to be explained:
+          what kind of change, how much it matters, and short quotes from both
+          years as evidence. Every quote must be a character-for-character
+          substring of the actual filing; fail validation twice and the whole
+          interpretation is excluded. An LLM asked to find changes will
+          hallucinate them; one handed a verified diff and asked why it matters
+          cannot.
+        </p>
+        <div class="pipe-terms">
+          <div class="term"><span class="t">materiality</span><span class="d">the model's grade per change: boilerplate (date rolls, restyling), notable, or material, what a portfolio manager would want surfaced</span></div>
+        </div>
+      </div>
     </div>
+
+    <div class="pipe-step">
+      <div class="pipe-rail"><span class="pipe-node">04</span></div>
+      <div class="pipe-body">
+        <h3>Compose the report</h3>
+        <p>
+          The surviving interpretations become chapters that follow the 10-K's
+          own structure, written as analyst prose: roughly a 15-minute read, not
+          a change log. Every claim carries a citation into an evidence drawer
+          holding the verbatim text from both years, and every figure in the
+          financial tables comes from XBRL, never from the model.
+        </p>
+        <div class="pipe-terms">
+          <div class="term"><span class="t">XBRL</span><span class="d">the machine-readable audited figures companies file alongside the prose; the report's numbers are read from it directly</span></div>
+          <div class="term"><span class="t">evidence drawer</span><span class="d">the expandable list under each chapter holding the exact quote pair behind every citation</span></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <div class="green-divider-band"></div>
 
-<div class="why-section">
+<div class="why-section reveal">
   <h2>Why this matters</h2>
   <p>
     The <em>Lazy Prices</em> research (Cohen, Malloy, Nguyen) found that firms
@@ -249,4 +555,53 @@
   </p>
 </div>
 
+<div class="green-divider-band"></div>
+
+<div class="harness-section reveal">
+  <div class="eyebrow">From the same codebase</div>
+  <h2>FinDocQA: the RAG eval harness</h2>
+  <p>
+    Delta is built on a retrieval layer that had to earn trust first. Before any
+    report copy was written, a deterministic evaluation harness measured how
+    chunking, embedding, and reranking choices affect retrieval accuracy over
+    this same SEC filing corpus, against ground truth pulled from XBRL.
+  </p>
+  <div class="harness-card">
+    <div class="harness-stats">
+      <div class="harness-stat"><span class="n">448</span><span class="l">scored answers (56 questions × 8 configs)</span></div>
+      <div class="harness-stat"><span class="n">28/56</span><span class="l">best joint score, section-aware chunking</span></div>
+      <div class="harness-stat"><span class="n">9-10/56</span><span class="l">joint score, fixed-size chunking</span></div>
+    </div>
+    <p>
+      Section-aware chunking (splitting on 10-K item boundaries instead of a
+      fixed token window) roughly triples retrieval accuracy over fixed-size
+      chunking, regardless of embedding model.
+    </p>
+    <p>
+      The generation model is frozen across all eight configs, so every score
+      change is attributable to a chunking, embedding, or rerank toggle, not the
+      LLM. That is also how the harness caught the "rerank trap": adding a
+      reranker consistently hurt numeric-match accuracy, since it favors
+      MD&amp;A prose that sounds relevant over the terse tables that actually
+      contain the number being asked for.
+    </p>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!('IntersectionObserver' in window)) return;
+  document.documentElement.classList.add('js-reveal');
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+})();
+</script>
 {% endblock %}

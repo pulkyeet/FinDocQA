@@ -48,7 +48,7 @@ Changes:
 
 
 CHAPTER_NARRATIVE_PROMPT = """You are a senior equity analyst writing one chapter of a
-five-year change report on {entity} ({ticker}), covering {year_range}.
+multi-year change report on {entity} ({ticker}), covering {year_range}.
 
 Chapter: **{chapter_title}** — {chapter_subtitle}
 
@@ -65,7 +65,9 @@ WHAT TO WRITE ABOUT — the substance of the change, not its bookkeeping:
   disclosing India as a named growth market in FY2023, having previously
   grouped it under Rest of Asia Pacific" — not "the segment paragraph was
   modified."
-- Trace direction and timing across the five years. When did a theme first
+- Trace direction and timing across the period covered. Never assert a span
+  other than {year_range} — some companies have shorter filing histories.
+  When did a theme first
   appear? Did it intensify, soften, or vanish? A risk that appears in FY2022
   and is gone by FY2025 is a story.
 - Group by theme (supply chain, AI, regulation, a named geography, pricing
@@ -84,6 +86,7 @@ HARD RULES:
   looking at a finance report, not a tool's output.
 - No headings, no bullet lists, no markdown. Continuous paragraphs separated by
   a blank line.
+- Never use an em dash (—). Use a comma, colon, semicolon, or period instead.
 - If the evidence is thin, write a shorter, honest chapter. Do not pad.
 
 Then choose up to 2 evidence items whose was/now contrast is most striking to
@@ -100,18 +103,20 @@ EVIDENCE:
 
 
 EXEC_SUMMARY_PROMPT = """You are a senior equity analyst. Below are the chapters of a
-five-year change report on {entity} ({ticker}), covering {year_range}, plus the
+multi-year change report on {entity} ({ticker}), covering {year_range}, plus the
 audited financial series.
 
 {xbrl_block}
 
 Write the executive summary: {min_words}-{max_words} words, 3-4 paragraphs.
 
-- Lead with the single most consequential shift across the five years.
+- Lead with the single most consequential shift across the period covered.
+  Never assert a span other than {year_range}.
 - Name the two or three themes that run through multiple chapters.
 - Where the numbers and the language disagree, say so plainly.
 - No headings, no bullets, no markdown. No citations. Do not mention the diff
   engine or how the report was produced.
+- Never use an em dash (—). Use a comma, colon, semicolon, or period instead.
 - Use ONLY what is below. Invent nothing.
 
 Output the summary text and nothing else.
