@@ -3,7 +3,7 @@
 # App names are a global namespace on Fly; "delta" is long taken. Change this if
 # `fly launch` reports the name is unavailable.
 app = "delta-findocqa"
-primary_region = "sjc"
+primary_region = "bom"
 
 # Static deploy: build the slim web image from Dockerfile (no buildpack, no
 # torch). Reports are baked into the image — no volume, no runtime secrets.
