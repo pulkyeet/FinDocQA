@@ -1,5 +1,7 @@
 # FinDocQA — SEC filing intelligence
 
+Live reports: **https://delta-findocqa.fly.dev** — seven Magnificent-7 tickers, five fiscal years, chaptered analyst reports.
+
 Two systems over one corpus of SEC 10-K filings:
 
 1. **Delta** (`src/delta/`) — a five-year year-over-year change-intelligence
@@ -103,6 +105,14 @@ Deliberately *not* in the report: per-paragraph change cards, materiality pills,
 and the thin anchors (Properties, Exhibits, Compensation) that carry no surfaced
 change. The diff is the evidence layer beneath the report, not the report.
 
+## Tech stack
+
+- **Backend:** Python 3.11, FastAPI + Jinja2 + Uvicorn (server-rendered, no SPA)
+- **AI / ML:** sentence-transformers (`bge-small-en-v1.5`, `e5-small-v2`) for paragraph alignment; `bge-reranker-base` for v1 rerank; OpenRouter (`deepseek-v4-flash`, fallback `opencode --agent paid-chatter`) for interpretation
+- **Data:** ChromaDB (4 collections: 2 strategies × 2 models), SEC EDGAR (`companyfacts` XBRL + inline-XBRL HTML), pandas
+- **Infrastructure:** Docker slim image (`python:3.11-slim` + `requirements-web.txt`), Fly.io static deploy (pre-built reports baked in), Makefile, `.env.example`
+- **Frontend:** Jinja2 HTML + `DESIGN.md` tokens (Inter + SF Mono, dark canvas `#101010`, electric green `#00d992`)
+
 ---
 
 # Part II — The eval harness
@@ -179,7 +189,7 @@ Python 3.11.9. Scripts use relative paths and data lives in `src/data/`, so
 pip install -r requirements.txt
 ```
 
-Secrets go in `src/.env`: `OPENROUTER_API_KEY`, `HF_TOKEN`, and `SEC_USER_AGENT`
+Copy `.env.example` to `src/.env` and set `OPENROUTER_API_KEY`, `HF_TOKEN`, and `SEC_USER_AGENT`
 (SEC asks for a descriptive user agent and may rate-limit generic ones).
 
 **Delta — the product:**

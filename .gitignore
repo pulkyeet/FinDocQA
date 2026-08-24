@@ -1,8 +1,15 @@
 .env
+.env.local
 .venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
 data/
 src/data/
 .playwright-mcp/
 *:Zone.Identifier
+.DS_Store
+Thumbs.db
